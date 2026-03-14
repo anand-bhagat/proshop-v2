@@ -7,6 +7,11 @@ import { checkPermission } from './helpers/auth.js';
 import { errorResponse } from './helpers/response.js';
 import agentConfig from './config.js';
 
+// Phase 2: Core Read Tool handlers
+import { getProduct } from './tools/products.js';
+import { getOrder } from './tools/orders.js';
+import { getUserProfile, getUser } from './tools/users.js';
+
 // ---------------------------------------------------------------------------
 // Tool Definitions — 17 backend + 11 frontend
 // ---------------------------------------------------------------------------
@@ -17,7 +22,7 @@ const tools = {
   get_product: {
     description:
       'Fetch a single product by its MongoDB ObjectId. Returns full product details including reviews, rating, price, and stock count. No authentication required.',
-    handler: null, // Phase 2
+    handler: getProduct,
     schema: {
       type: 'object',
       required: ['product_id'],
@@ -202,7 +207,7 @@ const tools = {
   get_order: {
     description:
       'Retrieve the full details of a specific order by its order ID. Includes populated user and product details. Authenticated users only.',
-    handler: null, // Phase 2
+    handler: getOrder,
     schema: {
       type: 'object',
       required: ['order_id'],
@@ -279,7 +284,7 @@ const tools = {
   get_user_profile: {
     description:
       'Retrieve the profile of the currently authenticated user. No parameters needed. Returns name, email, and admin status.',
-    handler: null, // Phase 2
+    handler: getUserProfile,
     schema: {
       type: 'object',
       properties: {},
@@ -311,7 +316,7 @@ const tools = {
   get_user: {
     description:
       'Retrieve a specific user\'s details by their user ID. Admin only. Password hash is excluded.',
-    handler: null, // Phase 2
+    handler: getUser,
     schema: {
       type: 'object',
       required: ['user_id'],

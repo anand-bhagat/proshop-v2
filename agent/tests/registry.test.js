@@ -166,8 +166,8 @@ describe('executeTool()', () => {
 
   it('should return NOT_IMPLEMENTED for unimplemented backend tools', async () => {
     const result = await executeTool(
-      'get_product',
-      { product_id: '507f1f77bcf86cd799439011' },
+      'search_products',
+      {},
       mockContext()
     );
     expect(result.success).toBe(false);
@@ -181,24 +181,27 @@ describe('executeTool()', () => {
 
 describe('registerHandler()', () => {
   it('should register a handler for an existing tool', async () => {
+    // Save the original handler
+    const originalHandler = getToolEntry('search_products').handler;
+
     const mockHandler = async () => ({
       success: true,
       data: { id: 'test' },
       metadata: {},
     });
 
-    registerHandler('get_product', mockHandler);
+    registerHandler('search_products', mockHandler);
 
     const result = await executeTool(
-      'get_product',
-      { product_id: '507f1f77bcf86cd799439011' },
+      'search_products',
+      {},
       mockContext()
     );
     expect(result.success).toBe(true);
     expect(result.data.id).toBe('test');
 
-    // Clean up — reset handler to null
-    registerHandler('get_product', null);
+    // Clean up — restore original handler
+    registerHandler('search_products', originalHandler);
   });
 
   it('should throw for unknown tool name', () => {
