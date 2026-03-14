@@ -725,8 +725,11 @@ async function executeTool(name, params, context) {
     };
   }
 
+  // Strip internal __confirmed flag before validation (not part of tool schema)
+  const { __confirmed, ...cleanParams } = params;
+
   // Validate parameters
-  const validation = validateParams(params, tool.schema);
+  const validation = validateParams(cleanParams, tool.schema);
   if (!validation.valid) {
     return errorResponse(validation.error, 'INVALID_PARAM');
   }
@@ -740,7 +743,7 @@ async function executeTool(name, params, context) {
       store: tool.frontendAction.store || null,
       action: tool.frontendAction.action || null,
       route: tool.frontendAction.route || null,
-      params,
+      params: cleanParams,
     };
   }
 
@@ -754,7 +757,7 @@ async function executeTool(name, params, context) {
 
   try {
     const start = Date.now();
-    const result = await tool.handler(params, context);
+    const result = await tool.handler(cleanParams, context);
     const duration = Date.now() - start;
 
     // Structured logging

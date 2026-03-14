@@ -284,7 +284,7 @@ describe('runAgent() — with mock adapter', () => {
     });
 
     expect(result.type).toBe('response');
-    expect(result.message).toContain('unable to complete');
+    expect(result.message).toContain('allowed number of steps');
 
     // Clean up
     registerHandler('get_top_products', null);

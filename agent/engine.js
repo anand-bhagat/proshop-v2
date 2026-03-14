@@ -147,6 +147,7 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
     try {
       llmResponse = await callLLM(truncated, toolDefs);
     } catch (err) {
+      console.error('LLM call failed:', err);
       return {
         type: 'error',
         message: `LLM call failed: ${err.message}`,
@@ -230,7 +231,7 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
   return {
     type: 'response',
     message:
-      'I was unable to complete this request within the allowed number of steps. Please try rephrasing your question.',
+      'I\'ve been working on this for a while but couldn\'t complete the request within the allowed number of steps. Here\'s what I found so far. Please try a more specific question if you need additional details.',
     toolResults,
     conversationId: conversation.id,
   };
@@ -335,6 +336,7 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
                 tool: toolCall.name,
                 params: toolCall.params,
                 message: `I'd like to ${toolCall.name.replace(/_/g, ' ')}. Should I proceed?`,
+                conversationId: conversation.id,
               },
             };
             return;
@@ -343,7 +345,7 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
           const result = await executeTool(toolCall.name, toolCall.params, userContext);
 
           if (result.type === 'frontend_action') {
-            yield { event: 'frontend_action', data: { toolCallId: toolCall.id, ...result } };
+            yield { event: 'frontend_action', data: { toolCallId: toolCall.id, ...result, conversationId: conversation.id } };
             return;
           }
 
@@ -367,12 +369,12 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
         return;
       }
     } catch (err) {
-      yield { event: 'error', data: { message: `LLM call failed: ${err.message}` } };
+      yield { event: 'error', data: { message: `LLM call failed: ${err.message}`, conversationId: conversation.id } };
       return;
     }
   }
 
-  yield { event: 'error', data: { message: 'Max iterations reached' } };
+  yield { event: 'error', data: { message: 'I\'ve been working on this for a while but couldn\'t complete the request. Please try rephrasing your question.', conversationId: conversation.id } };
 }
 
 export { runAgent, runAgentStream, setLLMAdapter, getConversation, truncateHistory };

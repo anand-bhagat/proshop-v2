@@ -4,7 +4,7 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
 import asyncHandler from '../middleware/asyncHandler.js';
-import { runAgent } from '../../agent/engine.js';
+import { runAgent, runAgentStream } from '../../agent/engine.js';
 import agentConfig from '../../agent/config.js';
 
 const router = express.Router();
@@ -86,7 +86,7 @@ router.post(
       name: req.user.name,
     };
 
-    // SSE streaming (placeholder — full implementation in LLM-07 / WID-04)
+    // SSE streaming — uses runAgentStream() async generator
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -94,14 +94,19 @@ router.post(
       res.flushHeaders();
 
       try {
-        const result = await runAgent({
+        const streamGen = runAgentStream({
           message,
           conversationHistory: [],
           userContext,
           frontendResult,
+          conversationId,
         });
 
-        res.write(`data: ${JSON.stringify(result)}\n\n`);
+        for await (const chunk of streamGen) {
+          // chunk = { event, data }
+          res.write(`data: ${JSON.stringify({ type: chunk.event, ...chunk.data })}\n\n`);
+        }
+
         res.write('data: [DONE]\n\n');
         res.end();
       } catch (err) {
@@ -117,12 +122,10 @@ router.post(
       conversationHistory: [],
       userContext,
       frontendResult,
+      conversationId,
     });
 
-    res.json({
-      ...result,
-      conversationId: conversationId || null,
-    });
+    res.json(result);
   })
 );
 

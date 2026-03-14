@@ -121,13 +121,21 @@ describe('executeTool()', () => {
   });
 
   it('should skip confirmation when __confirmed is true', async () => {
+    // Mock the handler to avoid MongoDB dependency
+    const origHandler = getToolEntry('delete_product').handler;
+    registerHandler('delete_product', async () => ({ success: true, data: { message: 'deleted' } }));
+
     const result = await executeTool(
       'delete_product',
       { product_id: '507f1f77bcf86cd799439011', __confirmed: true },
       mockAdminContext()
     );
-    // Should not return confirmation_needed (will return NOT_IMPLEMENTED since handler is null)
+    // Should not return confirmation_needed — should execute the handler
     expect(result.type).not.toBe('confirmation_needed');
+    expect(result.success).toBe(true);
+
+    // Restore original handler
+    registerHandler('delete_product', origHandler);
   });
 
   it('should return INVALID_PARAM for bad params on backend tool', async () => {

@@ -203,7 +203,7 @@ const AgentChat = () => {
     // Report result back to engine so the LLM loop continues
     try {
       const nextData = await callAgentApi({
-        frontendResult: { tool, ...result },
+        frontendResult: { tool, toolCallId: data.toolCallId, ...result },
         conversationId: conversationIdRef.current,
       });
       await handleAgentResponse(nextData);
@@ -312,14 +312,15 @@ const AgentChat = () => {
                   )
                 );
               } else if (event.type === 'tool_start') {
+                const toolName = event.name || event.tool;
                 setMessages((prev) => [
                   ...prev,
                   {
                     id: generateId(),
                     role: 'status',
                     content:
-                      TOOL_STATUS_MESSAGES[event.tool] ||
-                      `⚙️ Using ${event.tool}...`,
+                      TOOL_STATUS_MESSAGES[toolName] ||
+                      `⚙️ Using ${toolName}...`,
                     timestamp: Date.now(),
                   },
                 ]);
@@ -332,10 +333,19 @@ const AgentChat = () => {
                 setPendingConfirmation(event);
                 setIsLoading(false);
                 return;
-              } else if (event.type === 'conversation_id') {
-                setConversationId(event.conversationId);
-                conversationIdRef.current = event.conversationId;
+              } else if (event.type === 'error') {
+                if (event.conversationId) {
+                  setConversationId(event.conversationId);
+                  conversationIdRef.current = event.conversationId;
+                }
+                setError(event.message || 'An error occurred');
+                setIsLoading(false);
+                return;
               } else if (event.type === 'done') {
+                if (event.conversationId) {
+                  setConversationId(event.conversationId);
+                  conversationIdRef.current = event.conversationId;
+                }
                 break;
               }
             } catch {
