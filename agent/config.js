@@ -5,7 +5,7 @@ const agentConfig = {
   // LLM Provider Settings
   llm: {
     provider: process.env.LLM_PROVIDER || 'openai-compatible',
-    model: process.env.LLM_MODEL || 'GLM-4.7-FlashX',
+    model: process.env.LLM_MODEL || 'glm-4.7-flashx',
     apiKey: process.env.LLM_API_KEY || '',
     baseUrl: process.env.LLM_BASE_URL || 'https://open.z.ai/api/paas/v4',
     maxTokens: parseInt(process.env.LLM_MAX_TOKENS, 10) || 4096,
@@ -20,8 +20,8 @@ const agentConfig = {
       enabled: process.env.LLM_COST_TRACKING !== 'false',
       pricing: {
         // Z.ai models
-        'GLM-4.7-FlashX': { input: 0.0001, output: 0.0004 },
-        'GLM-4.7-Flash': { input: 0, output: 0 },
+        'glm-4.7-flashx': { input: 0.0001, output: 0.0004 },
+        'glm-4.7-flash': { input: 0, output: 0 },
         // Groq
         'llama-3.3-70b-versatile': { input: 0.00059, output: 0.00079 },
         // OpenAI

@@ -1,10 +1,8 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import ToolResultRenderer from './ToolResultRenderer';
 
 const MessageBubble = ({ message }) => {
-  if (message.role === 'status') {
-    return <div className='agent-chat-bubble agent-chat-bubble-status'>{message.content}</div>;
-  }
-
   const isUser = message.role === 'user';
 
   return (
@@ -13,7 +11,15 @@ const MessageBubble = ({ message }) => {
         isUser ? 'agent-chat-bubble-user' : 'agent-chat-bubble-agent'
       }`}
     >
-      {message.content}
+      {isUser ? (
+        message.content
+      ) : (
+        <div className='agent-chat-markdown'>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {message.content}
+          </ReactMarkdown>
+        </div>
+      )}
       {message.toolResults && <ToolResultRenderer result={message.toolResults} />}
     </div>
   );

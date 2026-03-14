@@ -4,7 +4,7 @@ import { trackUsage, getSessionUsage, resetSessionUsage } from '../../llm/cost-t
 const pricingTable = {
   'gpt-4o': { input: 0.0025, output: 0.01 },
   'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
-  'GLM-4.7-FlashX': { input: 0.0001, output: 0.0004 },
+  'glm-4.7-flashx': { input: 0.0001, output: 0.0004 },
 };
 
 describe('Cost Tracker', () => {
@@ -101,7 +101,7 @@ describe('Cost Tracker', () => {
     it('should use correct pricing for GLM model', () => {
       // 10000 input at $0.0001/1K = $0.001
       // 5000 output at $0.0004/1K = $0.002
-      trackUsage({ inputTokens: 10000, outputTokens: 5000 }, 'GLM-4.7-FlashX', pricingTable);
+      trackUsage({ inputTokens: 10000, outputTokens: 5000 }, 'glm-4.7-flashx', pricingTable);
 
       const usage = getSessionUsage();
       expect(usage.totalCost).toBeCloseTo(0.003, 6);

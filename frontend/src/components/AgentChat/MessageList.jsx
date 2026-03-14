@@ -1,22 +1,22 @@
 import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
-import TypingIndicator from './TypingIndicator';
 
 const MessageList = ({
   messages,
   isLoading,
+  statusMessage,
   suggestedPrompts,
   onSuggestedPrompt,
 }) => {
   const bottomRef = useRef(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or status changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, statusMessage]);
 
   // Empty state with suggested prompts
-  if (messages.length === 0 && suggestedPrompts) {
+  if (messages.length === 0 && !isLoading && suggestedPrompts) {
     return (
       <div className='agent-chat-messages'>
         <div className='agent-chat-suggestions'>
@@ -40,7 +40,12 @@ const MessageList = ({
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} />
       ))}
-      {isLoading && <TypingIndicator />}
+      {isLoading && (
+        <div className='agent-chat-status-indicator'>
+          <div className='agent-chat-status-dot'></div>
+          <span>{statusMessage || 'Thinking...'}</span>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

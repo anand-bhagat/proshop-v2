@@ -12,20 +12,6 @@ import './AgentChat.css';
 let msgIdCounter = 0;
 const generateId = () => `msg-${Date.now()}-${++msgIdCounter}`;
 
-const TOOL_STATUS_MESSAGES = {
-  add_to_cart: '🛒 Adding to cart...',
-  remove_from_cart: '🛒 Removing from cart...',
-  clear_cart: '🛒 Clearing cart...',
-  navigate_to_login: '🔑 Opening login...',
-  navigate_to_register: '📝 Opening registration...',
-  navigate_to_checkout: '📦 Opening checkout...',
-  navigate_to_profile: '👤 Opening profile...',
-  navigate_to_product: '📱 Opening product...',
-  navigate_to_cart: '🛒 Opening cart...',
-  navigate_to_order: '📋 Opening order details...',
-  navigate_to_home: '🏠 Going to home page...',
-};
-
 const SUGGESTED_PROMPTS = {
   user: [
     'Show me my recent orders',
@@ -46,6 +32,7 @@ const AgentChat = () => {
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState(null);
   const [error, setError] = useState(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
@@ -176,17 +163,6 @@ const AgentChat = () => {
   const handleFrontendAction = async (data) => {
     const { tool, actionType, params, route, action } = data;
 
-    // Show status message
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        role: 'status',
-        content: TOOL_STATUS_MESSAGES[tool] || '⚙️ Performing action...',
-        timestamp: Date.now(),
-      },
-    ]);
-
     let result;
     try {
       if (actionType === 'dispatch') {
@@ -253,6 +229,7 @@ const AgentChat = () => {
       },
     ]);
     setIsLoading(true);
+    setStatusMessage(null);
     setError(null);
 
     try {
@@ -278,13 +255,7 @@ const AgentChat = () => {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let agentContent = '';
-        const agentMsgId = generateId();
-        let toolResults = null;
-
-        setMessages((prev) => [
-          ...prev,
-          { id: agentMsgId, role: 'agent', content: '', timestamp: Date.now() },
-        ]);
+        let agentMsgId = null;
 
         let buffer = '';
 
@@ -304,36 +275,39 @@ const AgentChat = () => {
             try {
               const event = JSON.parse(jsonStr);
 
-              if (event.type === 'text_delta') {
+              if (event.type === 'status') {
+                setStatusMessage(event.message);
+              } else if (event.type === 'text_delta') {
+                // Clear status once text starts streaming
+                if (!agentMsgId) {
+                  agentMsgId = generateId();
+                  setStatusMessage(null);
+                  setMessages((prev) => [
+                    ...prev,
+                    { id: agentMsgId, role: 'agent', content: '', timestamp: Date.now() },
+                  ]);
+                }
                 agentContent += event.content;
+                const capturedId = agentMsgId;
+                const capturedContent = agentContent;
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === agentMsgId ? { ...m, content: agentContent } : m
+                    m.id === capturedId ? { ...m, content: capturedContent } : m
                   )
                 );
-              } else if (event.type === 'tool_start') {
-                const toolName = event.name || event.tool;
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    id: generateId(),
-                    role: 'status',
-                    content:
-                      TOOL_STATUS_MESSAGES[toolName] ||
-                      `⚙️ Using ${toolName}...`,
-                    timestamp: Date.now(),
-                  },
-                ]);
-              } else if (event.type === 'tool_result') {
-                toolResults = event.result;
+              } else if (event.type === 'tool_start' || event.type === 'tool_result') {
+                // Intermediate agentic loop events — status already handled by engine
               } else if (event.type === 'frontend_action') {
+                setStatusMessage(null);
                 await handleFrontendAction(event);
                 return;
               } else if (event.type === 'confirmation_needed') {
+                setStatusMessage(null);
                 setPendingConfirmation(event);
                 setIsLoading(false);
                 return;
               } else if (event.type === 'error') {
+                setStatusMessage(null);
                 if (event.conversationId) {
                   setConversationId(event.conversationId);
                   conversationIdRef.current = event.conversationId;
@@ -342,6 +316,7 @@ const AgentChat = () => {
                 setIsLoading(false);
                 return;
               } else if (event.type === 'done') {
+                setStatusMessage(null);
                 if (event.conversationId) {
                   setConversationId(event.conversationId);
                   conversationIdRef.current = event.conversationId;
@@ -354,21 +329,16 @@ const AgentChat = () => {
           }
         }
 
-        if (toolResults) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === agentMsgId ? { ...m, toolResults } : m
-            )
-          );
-        }
-
+        setStatusMessage(null);
         setIsLoading(false);
       } else {
         // Fallback: server returned plain JSON
+        setStatusMessage(null);
         const data = await res.json();
         await handleAgentResponse(data);
       }
     } catch (err) {
+      setStatusMessage(null);
       setError(err.message);
       setIsLoading(false);
     }
@@ -420,16 +390,15 @@ const AgentChat = () => {
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
     if (lastUserMsg) {
       setError(null);
-      sendMessage(lastUserMsg.content);
+      sendMessageStreaming(lastUserMsg.content);
     }
   };
 
   // ── Send handler ───────────────────────────────────────────────────
-  // Use non-streaming by default; call sendMessageStreaming when the
-  // backend supports it (stream: true in a config or feature flag).
+  // Use streaming to get real-time status updates during the agentic loop.
 
   const handleSend = (message) => {
-    sendMessage(message);
+    sendMessageStreaming(message);
   };
 
   // ── Render ─────────────────────────────────────────────────────────
@@ -474,6 +443,7 @@ const AgentChat = () => {
           <MessageList
             messages={messages}
             isLoading={isLoading}
+            statusMessage={statusMessage}
             suggestedPrompts={messages.length === 0 ? prompts : null}
             onSuggestedPrompt={handleSend}
           />

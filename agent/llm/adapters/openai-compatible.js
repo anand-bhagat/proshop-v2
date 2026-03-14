@@ -17,6 +17,7 @@ class OpenAICompatibleAdapter extends BaseLLMAdapter {
       ...(this.baseUrl && { baseURL: this.baseUrl }),
       timeout: this.timeoutMs,
     });
+    this.isZai = !!(this.baseUrl && this.baseUrl.includes('z.ai'));
   }
 
   formatTools(tools) {
@@ -63,6 +64,11 @@ class OpenAICompatibleAdapter extends BaseLLMAdapter {
       params.tools = this.formatTools(tools);
     }
 
+    // Z.ai: disable thinking/reasoning to get direct responses
+    if (this.isZai) {
+      params.thinking = { type: 'disabled' };
+    }
+
     const response = await this.client.chat.completions.create(params);
     return this.parseResponse(response);
   }
@@ -79,6 +85,11 @@ class OpenAICompatibleAdapter extends BaseLLMAdapter {
 
     if (tools.length > 0) {
       params.tools = this.formatTools(tools);
+    }
+
+    // Z.ai: disable thinking/reasoning to get direct responses
+    if (this.isZai) {
+      params.thinking = { type: 'disabled' };
     }
 
     const stream = await this.client.chat.completions.create(params);

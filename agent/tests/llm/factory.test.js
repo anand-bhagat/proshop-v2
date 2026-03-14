@@ -72,7 +72,7 @@ describe('LLM Adapter Factory', () => {
   it('should pass config through to adapter', () => {
     const adapter = getLLMAdapter({
       provider: 'openai-compatible',
-      model: 'GLM-4.7-FlashX',
+      model: 'glm-4.7-flashx',
       apiKey: 'zai-key',
       baseUrl: 'https://open.z.ai/api/paas/v4',
       maxTokens: 2048,
@@ -80,7 +80,7 @@ describe('LLM Adapter Factory', () => {
       timeoutMs: 15000,
     });
 
-    expect(adapter.model).toBe('GLM-4.7-FlashX');
+    expect(adapter.model).toBe('glm-4.7-flashx');
     expect(adapter.apiKey).toBe('zai-key');
     expect(adapter.baseUrl).toBe('https://open.z.ai/api/paas/v4');
     expect(adapter.maxTokens).toBe(2048);

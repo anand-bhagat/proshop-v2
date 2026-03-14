@@ -91,7 +91,13 @@ router.post(
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable proxy buffering (nginx, etc.)
       res.flushHeaders();
+
+      // Disable Nagle's algorithm so each write is sent immediately
+      if (res.socket) {
+        res.socket.setNoDelay(true);
+      }
 
       try {
         const streamGen = runAgentStream({
@@ -105,6 +111,8 @@ router.post(
         for await (const chunk of streamGen) {
           // chunk = { event, data }
           res.write(`data: ${JSON.stringify({ type: chunk.event, ...chunk.data })}\n\n`);
+          // Flush explicitly if compression middleware added flush()
+          if (typeof res.flush === 'function') res.flush();
         }
 
         res.write('data: [DONE]\n\n');

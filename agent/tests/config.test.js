@@ -17,7 +17,7 @@ describe('agent/config.js', () => {
     const { default: config } = await import('../config.js');
 
     expect(config.llm.provider).toBe('openai-compatible');
-    expect(config.llm.model).toBe('GLM-4.7-FlashX');
+    expect(config.llm.model).toBe('glm-4.7-flashx');
     expect(config.llm.baseUrl).toBe('https://open.z.ai/api/paas/v4');
     expect(config.llm.maxTokens).toBe(4096);
     expect(config.llm.temperature).toBe(0);
@@ -59,7 +59,7 @@ describe('agent/config.js', () => {
     const { default: config } = await import('../config.js');
 
     const pricing = config.llm.costTracking.pricing;
-    expect(pricing['GLM-4.7-FlashX']).toBeDefined();
+    expect(pricing['glm-4.7-flashx']).toBeDefined();
     expect(pricing['gpt-4o']).toBeDefined();
     expect(pricing['claude-sonnet-4-20250514']).toBeDefined();
     expect(pricing['gpt-4o'].input).toBeGreaterThan(0);
