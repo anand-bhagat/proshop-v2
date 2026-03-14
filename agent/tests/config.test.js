@@ -7,7 +7,6 @@ describe('agent/config.js', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    // Clear module cache so config re-reads env vars
   });
 
   afterEach(() => {
@@ -17,9 +16,15 @@ describe('agent/config.js', () => {
   it('should export default config with sensible defaults', async () => {
     const { default: config } = await import('../config.js');
 
-    expect(config.llm.provider).toBe('anthropic');
-    expect(config.llm.maxTokens).toBe(1024);
-    expect(config.llm.temperature).toBe(0.7);
+    expect(config.llm.provider).toBe('openai-compatible');
+    expect(config.llm.model).toBe('GLM-4.7-FlashX');
+    expect(config.llm.baseUrl).toBe('https://open.z.ai/api/paas/v4');
+    expect(config.llm.maxTokens).toBe(4096);
+    expect(config.llm.temperature).toBe(0);
+    expect(config.llm.timeoutMs).toBe(30000);
+    expect(config.llm.streamingEnabled).toBe(true);
+    expect(config.llm.costTracking.enabled).toBe(true);
+    expect(config.llm.maxHistoryMessages).toBe(50);
     expect(config.engine.maxIterations).toBe(10);
     expect(config.engine.maxRetries).toBe(2);
     expect(config.engine.timeoutMs).toBe(30000);
@@ -43,6 +48,22 @@ describe('agent/config.js', () => {
     expect(config.llm).toHaveProperty('apiKey');
     expect(config.llm).toHaveProperty('maxTokens');
     expect(config.llm).toHaveProperty('temperature');
+    expect(config.llm).toHaveProperty('baseUrl');
+    expect(config.llm).toHaveProperty('timeoutMs');
+    expect(config.llm).toHaveProperty('streamingEnabled');
+    expect(config.llm).toHaveProperty('costTracking');
+    expect(config.llm).toHaveProperty('maxHistoryMessages');
+  });
+
+  it('should include cost tracking pricing table', async () => {
+    const { default: config } = await import('../config.js');
+
+    const pricing = config.llm.costTracking.pricing;
+    expect(pricing['GLM-4.7-FlashX']).toBeDefined();
+    expect(pricing['gpt-4o']).toBeDefined();
+    expect(pricing['claude-sonnet-4-20250514']).toBeDefined();
+    expect(pricing['gpt-4o'].input).toBeGreaterThan(0);
+    expect(pricing['gpt-4o'].output).toBeGreaterThan(0);
   });
 
   it('should include engine settings', async () => {

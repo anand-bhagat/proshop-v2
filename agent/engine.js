@@ -1,71 +1,94 @@
 // agent/engine.js — Agentic Execution Engine
 // Implements the tool-calling loop: LLM picks tool -> execute -> feed result back -> repeat.
-// Uses a placeholder for the LLM call — the real adapter is wired in Phase 7 (LLM-07).
+// Uses the LLM adapter layer from agent/llm/ for provider-agnostic communication.
 
 import { getToolDefinitions, executeTool, getToolEntry } from './registry.js';
 import agentConfig from './config.js';
+import { getLLMAdapter } from './llm/index.js';
+import { buildSystemPrompt } from './llm/prompt-builder.js';
+import { trackUsage } from './llm/cost-tracker.js';
 
 // ---------------------------------------------------------------------------
-// Placeholder LLM adapter — replaced by real adapter in LLM-07
+// Adapter management
 // ---------------------------------------------------------------------------
 
 let llmAdapter = null;
 
 /**
- * Set the LLM adapter (called once the adapter layer is built).
+ * Set the LLM adapter directly (for testing or manual override).
+ * When set, this takes priority over config-based adapter creation.
  */
 function setLLMAdapter(adapter) {
   llmAdapter = adapter;
 }
 
 /**
- * Placeholder LLM call — returns a simple text response.
- * In production this calls adapter.chat(messages, tools).
- * Returns normalized shape: { content, toolCalls, usage }
+ * Get the active LLM adapter — manual override or config-based.
+ */
+function getAdapter() {
+  if (llmAdapter) return llmAdapter;
+  return getLLMAdapter(agentConfig.llm);
+}
+
+/**
+ * Call the LLM via the adapter. Handles cost tracking.
  */
 async function callLLM(messages, toolDefs) {
-  if (llmAdapter) {
-    return llmAdapter.chat(messages, toolDefs);
+  const adapter = getAdapter();
+  const response = await adapter.chat(messages, toolDefs);
+
+  if (agentConfig.llm.costTracking?.enabled && response.usage) {
+    trackUsage(response.usage, agentConfig.llm.model, agentConfig.llm.costTracking.pricing);
   }
 
-  // Placeholder: echo back a message indicating no LLM adapter is configured
-  const lastUserMsg = [...messages]
-    .reverse()
-    .find((m) => m.role === 'user');
-
-  return {
-    content: `[Agent placeholder] I received your message: "${lastUserMsg?.content || ''}" — but no LLM adapter is configured yet. Wire one via setLLMAdapter().`,
-    toolCalls: null,
-    usage: { inputTokens: 0, outputTokens: 0 },
-  };
+  return response;
 }
 
 // ---------------------------------------------------------------------------
-// System Prompt Builder (minimal — full version in LLM-05)
+// Conversation Memory
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(toolDefs, userContext) {
-  const toolList = toolDefs
-    .map((t) => `- ${t.name}: ${t.description}`)
-    .join('\n');
+/** In-memory conversation store. Replace with MongoDB in production (see Conversation model). */
+const conversations = new Map();
 
-  return `You are an AI assistant embedded in ProShop, an e-commerce store. You help users by querying and managing their data using the tools available to you.
+/**
+ * Get or create a conversation.
+ */
+function getConversation(conversationId) {
+  if (conversationId && conversations.has(conversationId)) {
+    return conversations.get(conversationId);
+  }
+  const id = conversationId || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const conv = { id, messages: [], createdAt: new Date() };
+  conversations.set(id, conv);
+  return conv;
+}
 
-## Rules
-1. ALWAYS use tools to get data. Never make up information.
-2. If a query is ambiguous, ask for clarification.
-3. For destructive actions (delete, cancel), ALWAYS confirm with the user first.
-4. If a tool returns an error, explain the issue clearly. Don't retry more than twice.
-5. When showing data, format it clearly (tables for lists, summaries for aggregations).
-6. Respect the user's permissions — if a tool returns a permission error, explain that the action requires elevated access.
+/**
+ * Truncate conversation history to stay within context limits.
+ * Keeps the system prompt (always first) and the last N messages.
+ */
+function truncateHistory(messages, maxMessages) {
+  if (!maxMessages || messages.length <= maxMessages) return messages;
+  // Always keep system prompt if present
+  const systemMsg = messages[0]?.role === 'system' ? messages[0] : null;
+  const nonSystem = systemMsg ? messages.slice(1) : messages;
+  const truncated = nonSystem.slice(-maxMessages);
+  return systemMsg ? [systemMsg, ...truncated] : truncated;
+}
 
-## Available Tools
-${toolList}
+// ---------------------------------------------------------------------------
+// System Prompt
+// ---------------------------------------------------------------------------
 
-## User Context
-- User ID: ${userContext.userId || 'anonymous'}
-- Role: ${userContext.role || 'guest'}
-- Name: ${userContext.name || 'Guest'}`;
+function buildPrompt(toolDefs, userContext) {
+  return buildSystemPrompt({
+    appName: 'ProShop',
+    appDescription:
+      'An e-commerce store selling electronics and other products. You help users browse products, manage orders, update profiles, and handle admin tasks.',
+    userContext,
+    toolDefinitions: toolDefs,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -80,21 +103,30 @@ ${toolList}
  * @param {Array}  options.conversationHistory - Previous messages [{role, content}]
  * @param {Object} options.userContext - {userId, role, name}
  * @param {Object} [options.frontendResult] - Result from a frontend tool execution
+ * @param {string} [options.conversationId] - Conversation ID for memory persistence
  * @returns {Object} { type, message, toolResults, frontendAction, conversationId }
  */
-async function runAgent({ message, conversationHistory = [], userContext, frontendResult }) {
+async function runAgent({ message, conversationHistory = [], userContext, frontendResult, conversationId }) {
   const maxIterations = agentConfig.engine.maxIterations;
   const toolDefs = getToolDefinitions(userContext.role);
-  const systemPrompt = buildSystemPrompt(toolDefs, userContext);
+  const systemPrompt = buildPrompt(toolDefs, userContext);
+
+  // Conversation memory
+  const conversation = getConversation(conversationId);
 
   const messages = [
     { role: 'system', content: systemPrompt },
+    ...conversation.messages,
     ...conversationHistory,
   ];
 
+  // Truncate to keep within context limits
+  const maxHistoryMessages = agentConfig.llm.maxHistoryMessages || 50;
+  const truncated = truncateHistory(messages, maxHistoryMessages);
+
   // If this is a frontend result callback, inject it as a tool result
   if (frontendResult) {
-    messages.push({
+    truncated.push({
       role: 'tool',
       tool_call_id: frontendResult.toolCallId || 'frontend',
       content: JSON.stringify({
@@ -104,7 +136,8 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
       }),
     });
   } else {
-    messages.push({ role: 'user', content: message });
+    truncated.push({ role: 'user', content: message });
+    conversation.messages.push({ role: 'user', content: message });
   }
 
   const toolResults = [];
@@ -112,19 +145,20 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
   for (let i = 0; i < maxIterations; i++) {
     let llmResponse;
     try {
-      llmResponse = await callLLM(messages, toolDefs);
+      llmResponse = await callLLM(truncated, toolDefs);
     } catch (err) {
       return {
         type: 'error',
         message: `LLM call failed: ${err.message}`,
         toolResults,
+        conversationId: conversation.id,
       };
     }
 
     // If LLM wants to call tools
     if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
       // Add assistant message with tool calls to history
-      messages.push({
+      truncated.push({
         role: 'assistant',
         content: llmResponse.content || '',
         tool_calls: llmResponse.toolCalls,
@@ -141,6 +175,7 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
             params: toolCall.params,
             message: `I'd like to ${toolCall.name.replace(/_/g, ' ')}. Should I proceed?`,
             toolResults,
+            conversationId: conversation.id,
           };
         }
 
@@ -154,12 +189,13 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
             toolCallId: toolCall.id,
             ...result,
             toolResults,
+            conversationId: conversation.id,
           };
         }
 
         // Confirmation needed (from registry-level check)
         if (result.type === 'confirmation_needed') {
-          return { ...result, toolResults };
+          return { ...result, toolResults, conversationId: conversation.id };
         }
 
         // Feed result back to LLM
@@ -168,7 +204,7 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
           result,
         });
 
-        messages.push({
+        truncated.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
@@ -180,10 +216,12 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
 
     // LLM produced a text response — we're done
     if (llmResponse.content) {
+      conversation.messages.push({ role: 'assistant', content: llmResponse.content });
       return {
         type: 'response',
         message: llmResponse.content,
         toolResults,
+        conversationId: conversation.id,
       };
     }
   }
@@ -194,7 +232,147 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
     message:
       'I was unable to complete this request within the allowed number of steps. Please try rephrasing your question.',
     toolResults,
+    conversationId: conversation.id,
   };
 }
 
-export { runAgent, setLLMAdapter, buildSystemPrompt };
+// ---------------------------------------------------------------------------
+// Streaming Execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the agent with streaming responses.
+ * Yields SSE-compatible events as the LLM streams its response.
+ *
+ * @param {Object} options - Same as runAgent()
+ * @yields {Object} SSE events: { event, data }
+ */
+async function* runAgentStream({ message, conversationHistory = [], userContext, frontendResult, conversationId }) {
+  const maxIterations = agentConfig.engine.maxIterations;
+  const toolDefs = getToolDefinitions(userContext.role);
+  const systemPrompt = buildPrompt(toolDefs, userContext);
+
+  const conversation = getConversation(conversationId);
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...conversation.messages,
+    ...conversationHistory,
+  ];
+
+  const maxHistoryMessages = agentConfig.llm.maxHistoryMessages || 50;
+  const truncated = truncateHistory(messages, maxHistoryMessages);
+
+  if (frontendResult) {
+    truncated.push({
+      role: 'tool',
+      tool_call_id: frontendResult.toolCallId || 'frontend',
+      content: JSON.stringify({
+        success: frontendResult.success,
+        message: frontendResult.message,
+        data: frontendResult.data || null,
+      }),
+    });
+  } else {
+    truncated.push({ role: 'user', content: message });
+    conversation.messages.push({ role: 'user', content: message });
+  }
+
+  const toolResults = [];
+  const adapter = getAdapter();
+
+  for (let i = 0; i < maxIterations; i++) {
+    try {
+      // Collect the full response from stream for tool call detection
+      let fullContent = '';
+      const toolCallsInProgress = new Map();
+      let usage = null;
+
+      for await (const chunk of adapter.chatStream(truncated, toolDefs)) {
+        if (chunk.type === 'text_delta') {
+          fullContent += chunk.content;
+          yield { event: 'text_delta', data: chunk.content };
+        } else if (chunk.type === 'tool_start') {
+          toolCallsInProgress.set(chunk.id, { id: chunk.id, name: chunk.name, argsJson: '' });
+          yield { event: 'tool_start', data: { name: chunk.name, id: chunk.id } };
+        } else if (chunk.type === 'tool_input_delta') {
+          // Append to the last tool call's arguments
+          const lastToolId = [...toolCallsInProgress.keys()].pop();
+          if (lastToolId) {
+            toolCallsInProgress.get(lastToolId).argsJson += chunk.content;
+          }
+        } else if (chunk.type === 'done') {
+          usage = chunk.usage;
+        }
+      }
+
+      // Track cost
+      if (agentConfig.llm.costTracking?.enabled && usage) {
+        trackUsage(usage, agentConfig.llm.model, agentConfig.llm.costTracking.pricing);
+      }
+
+      // Process tool calls if any
+      const toolCalls = [...toolCallsInProgress.values()].map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        params: tc.argsJson ? JSON.parse(tc.argsJson) : {},
+      }));
+
+      if (toolCalls.length > 0) {
+        truncated.push({
+          role: 'assistant',
+          content: fullContent || '',
+          tool_calls: toolCalls,
+        });
+
+        for (const toolCall of toolCalls) {
+          const toolEntry = getToolEntry(toolCall.name);
+
+          if (toolEntry && toolEntry.confirmBefore && !toolCall.params.__confirmed) {
+            yield {
+              event: 'confirmation_needed',
+              data: {
+                tool: toolCall.name,
+                params: toolCall.params,
+                message: `I'd like to ${toolCall.name.replace(/_/g, ' ')}. Should I proceed?`,
+              },
+            };
+            return;
+          }
+
+          const result = await executeTool(toolCall.name, toolCall.params, userContext);
+
+          if (result.type === 'frontend_action') {
+            yield { event: 'frontend_action', data: { toolCallId: toolCall.id, ...result } };
+            return;
+          }
+
+          toolResults.push({ tool: toolCall.name, result });
+          yield { event: 'tool_result', data: { tool: toolCall.name, result } };
+
+          truncated.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        }
+
+        continue;
+      }
+
+      // Text-only response — done
+      if (fullContent) {
+        conversation.messages.push({ role: 'assistant', content: fullContent });
+        yield { event: 'done', data: { conversationId: conversation.id } };
+        return;
+      }
+    } catch (err) {
+      yield { event: 'error', data: { message: `LLM call failed: ${err.message}` } };
+      return;
+    }
+  }
+
+  yield { event: 'error', data: { message: 'Max iterations reached' } };
+}
+
+export { runAgent, runAgentStream, setLLMAdapter, getConversation, truncateHistory };
