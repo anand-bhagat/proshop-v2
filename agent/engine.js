@@ -362,11 +362,13 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
 
   for (let i = 0; i < maxIterations; i++) {
     try {
-      // Status: only emit "Thinking..." on first iteration.
+      // Status: only emit on first iteration.
       // On subsequent iterations the previous tool status stays visible
       // until text starts streaming (avoids rapid status flicker).
       if (i === 0) {
-        yield { event: 'status', data: { message: 'Thinking...' } };
+        // Frontend tool continuation — agent is just wrapping up, not starting fresh
+        const initialStatus = frontendResult ? '✍️ Writing response...' : 'Thinking...';
+        yield { event: 'status', data: { message: initialStatus } };
       }
 
       const llmStart = Date.now();

@@ -158,6 +158,115 @@ const AgentChat = () => {
     }
   };
 
+  // ── SSE stream processor (shared by sendMessage and frontend result callback)
+
+  const processSSEStream = async (res) => {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let agentContent = '';
+    let agentMsgId = null;
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr || jsonStr === '[DONE]') continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === 'status') {
+            setStatusMessage(event.message);
+          } else if (event.type === 'text_delta') {
+            // Clear status once text starts streaming
+            if (!agentMsgId) {
+              agentMsgId = generateId();
+              setStatusMessage(null);
+              setMessages((prev) => [
+                ...prev,
+                { id: agentMsgId, role: 'agent', content: '', timestamp: Date.now() },
+              ]);
+            }
+            agentContent += event.content;
+            const capturedId = agentMsgId;
+            const capturedContent = agentContent;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === capturedId ? { ...m, content: capturedContent } : m
+              )
+            );
+          } else if (event.type === 'tool_start' || event.type === 'tool_result') {
+            // Intermediate agentic loop events — status already handled by engine
+          } else if (event.type === 'frontend_action') {
+            setStatusMessage(null);
+            await handleFrontendAction(event);
+            return;
+          } else if (event.type === 'confirmation_needed') {
+            setStatusMessage(null);
+            setPendingConfirmation(event);
+            setIsLoading(false);
+            return;
+          } else if (event.type === 'error') {
+            setStatusMessage(null);
+            if (event.conversationId) {
+              setConversationId(event.conversationId);
+              conversationIdRef.current = event.conversationId;
+            }
+            setError(event.message || 'An error occurred');
+            setIsLoading(false);
+            return;
+          } else if (event.type === 'done') {
+            setStatusMessage(null);
+            if (event.conversationId) {
+              setConversationId(event.conversationId);
+              conversationIdRef.current = event.conversationId;
+            }
+            break;
+          }
+        } catch {
+          // skip malformed JSON lines
+        }
+      }
+    }
+
+    setStatusMessage(null);
+    setIsLoading(false);
+  };
+
+  // ── Streaming fetch helper ──────────────────────────────────────────
+
+  const fetchSSE = async (body) => {
+    const res = await fetch('/api/agent/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `Agent error: ${res.status}`);
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+
+    if (contentType.includes('text/event-stream')) {
+      await processSSEStream(res);
+    } else {
+      // Fallback: server returned plain JSON
+      setStatusMessage(null);
+      const data = await res.json();
+      await handleAgentResponse(data);
+    }
+  };
+
   // ── Handle frontend action from engine ─────────────────────────────
 
   const handleFrontendAction = async (data) => {
@@ -176,14 +285,15 @@ const AgentChat = () => {
       result = { success: false, error: err.message };
     }
 
-    // Report result back to engine so the LLM loop continues
+    // Report result back to engine via streaming so we get real-time
+    // status updates if the LLM chains more tools after this
     try {
-      const nextData = await callAgentApi({
+      await fetchSSE({
         frontendResult: { tool, toolCallId: data.toolCallId, ...result },
         conversationId: conversationIdRef.current,
       });
-      await handleAgentResponse(nextData);
     } catch (err) {
+      setStatusMessage(null);
       setError(err.message);
       setIsLoading(false);
     }
@@ -233,110 +343,10 @@ const AgentChat = () => {
     setError(null);
 
     try {
-      const res = await fetch('/api/agent/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMessage,
-          conversationId: conversationIdRef.current,
-          stream: true,
-        }),
+      await fetchSSE({
+        message: userMessage,
+        conversationId: conversationIdRef.current,
       });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || `Agent error: ${res.status}`);
-      }
-
-      const contentType = res.headers.get('content-type') || '';
-
-      // If the server actually returned SSE, stream it
-      if (contentType.includes('text/event-stream')) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let agentContent = '';
-        let agentMsgId = null;
-
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop(); // keep incomplete line
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr || jsonStr === '[DONE]') continue;
-
-            try {
-              const event = JSON.parse(jsonStr);
-
-              if (event.type === 'status') {
-                setStatusMessage(event.message);
-              } else if (event.type === 'text_delta') {
-                // Clear status once text starts streaming
-                if (!agentMsgId) {
-                  agentMsgId = generateId();
-                  setStatusMessage(null);
-                  setMessages((prev) => [
-                    ...prev,
-                    { id: agentMsgId, role: 'agent', content: '', timestamp: Date.now() },
-                  ]);
-                }
-                agentContent += event.content;
-                const capturedId = agentMsgId;
-                const capturedContent = agentContent;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === capturedId ? { ...m, content: capturedContent } : m
-                  )
-                );
-              } else if (event.type === 'tool_start' || event.type === 'tool_result') {
-                // Intermediate agentic loop events — status already handled by engine
-              } else if (event.type === 'frontend_action') {
-                setStatusMessage(null);
-                await handleFrontendAction(event);
-                return;
-              } else if (event.type === 'confirmation_needed') {
-                setStatusMessage(null);
-                setPendingConfirmation(event);
-                setIsLoading(false);
-                return;
-              } else if (event.type === 'error') {
-                setStatusMessage(null);
-                if (event.conversationId) {
-                  setConversationId(event.conversationId);
-                  conversationIdRef.current = event.conversationId;
-                }
-                setError(event.message || 'An error occurred');
-                setIsLoading(false);
-                return;
-              } else if (event.type === 'done') {
-                setStatusMessage(null);
-                if (event.conversationId) {
-                  setConversationId(event.conversationId);
-                  conversationIdRef.current = event.conversationId;
-                }
-                break;
-              }
-            } catch {
-              // skip malformed JSON lines
-            }
-          }
-        }
-
-        setStatusMessage(null);
-        setIsLoading(false);
-      } else {
-        // Fallback: server returned plain JSON
-        setStatusMessage(null);
-        const data = await res.json();
-        await handleAgentResponse(data);
-      }
     } catch (err) {
       setStatusMessage(null);
       setError(err.message);
