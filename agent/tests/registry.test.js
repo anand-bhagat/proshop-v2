@@ -166,9 +166,9 @@ describe('executeTool()', () => {
 
   it('should return NOT_IMPLEMENTED for unimplemented backend tools', async () => {
     const result = await executeTool(
-      'search_products',
+      'create_product',
       {},
-      mockContext()
+      mockContext({ role: 'admin' })
     );
     expect(result.success).toBe(false);
     expect(result.code).toBe('NOT_IMPLEMENTED');

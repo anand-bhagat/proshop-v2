@@ -5,11 +5,14 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 // Mock the User model before importing handlers
 const mockSelect = jest.fn();
 const mockFindById = jest.fn();
+const mockFind = jest.fn();
 jest.unstable_mockModule('../../../backend/models/userModel.js', () => ({
-  default: { findById: mockFindById },
+  default: { findById: mockFindById, find: mockFind },
 }));
 
-const { getUserProfile, getUser } = await import('../../tools/users.js');
+const { getUserProfile, getUser, listUsers } = await import(
+  '../../tools/users.js'
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,6 +36,20 @@ const sampleUser = {
   name: 'John Doe',
   email: 'john@example.com',
   isAdmin: false,
+};
+
+const sampleUser2 = {
+  _id: '507f1f77bcf86cd799439012',
+  name: 'Jane Smith',
+  email: 'jane@example.com',
+  isAdmin: false,
+};
+
+const sampleAdmin = {
+  _id: '507f1f77bcf86cd799439013',
+  name: 'Admin User',
+  email: 'admin@example.com',
+  isAdmin: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -159,6 +176,57 @@ describe('get_user', () => {
       { user_id: '507f1f77bcf86cd799439011' },
       mockAdminContext()
     );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// list_users
+// ---------------------------------------------------------------------------
+
+describe('list_users', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return all users without password fields', async () => {
+    mockSelect.mockResolvedValue([sampleUser, sampleUser2, sampleAdmin]);
+    mockFind.mockReturnValue({ select: mockSelect });
+
+    const result = await listUsers({}, mockAdminContext());
+
+    expect(result.success).toBe(true);
+    expect(result.data).toHaveLength(3);
+    expect(mockFind).toHaveBeenCalledWith({});
+    expect(mockSelect).toHaveBeenCalledWith('-password');
+  });
+
+  it('should return empty array when no users exist', async () => {
+    mockSelect.mockResolvedValue([]);
+    mockFind.mockReturnValue({ select: mockSelect });
+
+    const result = await listUsers({}, mockAdminContext());
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual([]);
+  });
+
+  it('should verify password field is excluded via select', async () => {
+    mockSelect.mockResolvedValue([sampleUser]);
+    mockFind.mockReturnValue({ select: mockSelect });
+
+    await listUsers({}, mockAdminContext());
+
+    expect(mockSelect).toHaveBeenCalledWith('-password');
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockSelect.mockRejectedValue(new Error('DB connection lost'));
+    mockFind.mockReturnValue({ select: mockSelect });
+
+    const result = await listUsers({}, mockAdminContext());
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('INTERNAL_ERROR');

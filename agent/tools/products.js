@@ -29,4 +29,55 @@ async function getProduct(params, context) {
   }
 }
 
-export { getProduct };
+/**
+ * Escape special regex characters to prevent ReDoS.
+ */
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Tool: search_products
+ * Search the product catalog by keyword with pagination.
+ * Access: public
+ */
+async function searchProducts(params, context) {
+  const { keyword, page = 1 } = params;
+  const pageSize = Number(process.env.PAGINATION_LIMIT) || 8;
+
+  try {
+    const filter = keyword
+      ? { name: { $regex: escapeRegex(keyword), $options: 'i' } }
+      : {};
+
+    const count = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
+      .limit(pageSize)
+      .skip(pageSize * (page - 1));
+
+    return successResponse({
+      products,
+      page,
+      pages: Math.ceil(count / pageSize),
+    });
+  } catch (err) {
+    return errorResponse(`Failed to search products: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Tool: get_top_products
+ * Retrieve the top 3 highest-rated products.
+ * Access: public
+ */
+async function getTopProducts(params, context) {
+  try {
+    const products = await Product.find({}).sort({ rating: -1 }).limit(3);
+
+    return successResponse(products);
+  } catch (err) {
+    return errorResponse(`Failed to fetch top products: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+export { getProduct, searchProducts, getTopProducts };

@@ -12,6 +12,11 @@ import { getProduct } from './tools/products.js';
 import { getOrder } from './tools/orders.js';
 import { getUserProfile, getUser } from './tools/users.js';
 
+// Phase 3: Search & List Tool handlers
+import { searchProducts, getTopProducts } from './tools/products.js';
+import { getMyOrders, listOrders } from './tools/orders.js';
+import { listUsers } from './tools/users.js';
+
 // ---------------------------------------------------------------------------
 // Tool Definitions — 17 backend + 11 frontend
 // ---------------------------------------------------------------------------
@@ -44,7 +49,7 @@ const tools = {
   search_products: {
     description:
       'Search the product catalog by keyword with pagination. Returns matching products, page count, and current page. Keyword is matched as case-insensitive regex against product names. Omit keyword to return all products.',
-    handler: null, // Phase 3
+    handler: searchProducts,
     schema: {
       type: 'object',
       required: [],
@@ -72,7 +77,7 @@ const tools = {
   get_top_products: {
     description:
       'Retrieve the top 3 highest-rated products in the catalog. No parameters needed. No authentication required.',
-    handler: null, // Phase 3
+    handler: getTopProducts,
     schema: {
       type: 'object',
       required: [],
@@ -229,7 +234,7 @@ const tools = {
   get_my_orders: {
     description:
       'Retrieve all orders placed by the currently authenticated user. No parameters needed.',
-    handler: null, // Phase 3
+    handler: getMyOrders,
     schema: {
       type: 'object',
       properties: {},
@@ -244,7 +249,7 @@ const tools = {
   list_orders: {
     description:
       'Retrieve all orders in the system with populated user details. Admin only.',
-    handler: null, // Phase 3
+    handler: listOrders,
     schema: {
       type: 'object',
       properties: {},
@@ -300,7 +305,7 @@ const tools = {
   list_users: {
     description:
       'Retrieve a list of all registered users. Admin only. Password hashes are excluded.',
-    handler: null, // Phase 3
+    handler: listUsers,
     schema: {
       type: 'object',
       properties: {},

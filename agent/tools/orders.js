@@ -29,4 +29,34 @@ async function getOrder(params, context) {
   }
 }
 
-export { getOrder };
+/**
+ * Tool: get_my_orders
+ * Retrieve all orders placed by the currently authenticated user.
+ * Access: authenticated
+ */
+async function getMyOrders(params, context) {
+  try {
+    const orders = await Order.find({ user: context.userId });
+
+    return successResponse(orders);
+  } catch (err) {
+    return errorResponse(`Failed to fetch orders: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Tool: list_orders
+ * Retrieve all orders in the system with populated user details.
+ * Access: admin
+ */
+async function listOrders(params, context) {
+  try {
+    const orders = await Order.find({}).populate('user', 'id name');
+
+    return successResponse(orders);
+  } catch (err) {
+    return errorResponse(`Failed to fetch orders: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+export { getOrder, getMyOrders, listOrders };

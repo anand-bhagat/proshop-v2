@@ -53,4 +53,19 @@ async function getUser(params, context) {
   }
 }
 
-export { getUserProfile, getUser };
+/**
+ * Tool: list_users
+ * Retrieve all registered users. Password hashes are excluded.
+ * Access: admin
+ */
+async function listUsers(params, context) {
+  try {
+    const users = await User.find({}).select('-password');
+
+    return successResponse(users);
+  } catch (err) {
+    return errorResponse(`Failed to fetch users: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+export { getUserProfile, getUser, listUsers };
