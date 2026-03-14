@@ -59,4 +59,33 @@ async function listOrders(params, context) {
   }
 }
 
-export { getOrder, getMyOrders, listOrders };
+/**
+ * Tool: mark_order_delivered
+ * Mark an order as delivered by setting isDelivered and deliveredAt.
+ * Access: admin
+ */
+async function markOrderDelivered(params, context) {
+  const { order_id } = params;
+
+  if (!order_id || !isValidObjectId(order_id)) {
+    return errorResponse('Invalid or missing order ID', 'INVALID_PARAM');
+  }
+
+  try {
+    const order = await Order.findById(order_id);
+
+    if (!order) {
+      return errorResponse(`Order ${order_id} not found`, 'NOT_FOUND');
+    }
+
+    order.isDelivered = true;
+    order.deliveredAt = Date.now();
+
+    const updatedOrder = await order.save();
+    return successResponse(updatedOrder);
+  } catch (err) {
+    return errorResponse(`Failed to mark order as delivered: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+export { getOrder, getMyOrders, listOrders, markOrderDelivered };

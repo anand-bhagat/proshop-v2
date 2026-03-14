@@ -6,13 +6,20 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 const mockSelect = jest.fn();
 const mockFindById = jest.fn();
 const mockFind = jest.fn();
+const mockSave = jest.fn();
+const mockDeleteOne = jest.fn();
 jest.unstable_mockModule('../../../backend/models/userModel.js', () => ({
-  default: { findById: mockFindById, find: mockFind },
+  default: { findById: mockFindById, find: mockFind, deleteOne: mockDeleteOne },
 }));
 
-const { getUserProfile, getUser, listUsers } = await import(
-  '../../tools/users.js'
-);
+const {
+  getUserProfile,
+  getUser,
+  listUsers,
+  updateUserProfile,
+  updateUser,
+  deleteUser,
+} = await import('../../tools/users.js');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -227,6 +234,304 @@ describe('list_users', () => {
     mockFind.mockReturnValue({ select: mockSelect });
 
     const result = await listUsers({}, mockAdminContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// update_user_profile
+// ---------------------------------------------------------------------------
+
+describe('update_user_profile', () => {
+  let mockUser;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFindById.mockReset();
+    mockUser = {
+      _id: '507f1f77bcf86cd799439011',
+      name: 'John Doe',
+      email: 'john@example.com',
+      isAdmin: false,
+      save: mockSave,
+    };
+  });
+
+  it('should update the user name', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    mockSave.mockResolvedValue({ ...mockUser, name: 'Jane Doe' });
+
+    const result = await updateUserProfile(
+      { name: 'Jane Doe' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockUser.name).toBe('Jane Doe');
+    expect(result.data).not.toHaveProperty('password');
+  });
+
+  it('should update the user email', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    mockSave.mockResolvedValue({ ...mockUser, email: 'jane@example.com' });
+
+    const result = await updateUserProfile(
+      { email: 'jane@example.com' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockUser.email).toBe('jane@example.com');
+  });
+
+  it('should reject password field', async () => {
+    const result = await updateUserProfile(
+      { password: 'newpass123' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('FORBIDDEN');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INVALID_PARAM when no fields provided', async () => {
+    const result = await updateUserProfile({}, mockContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return NOT_FOUND if user does not exist', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await updateUserProfile(
+      { name: 'Test' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return CONFLICT for duplicate email', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    const dupError = new Error('Duplicate key');
+    dupError.code = 11000;
+    mockSave.mockRejectedValue(dupError);
+
+    const result = await updateUserProfile(
+      { email: 'taken@example.com' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('CONFLICT');
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await updateUserProfile(
+      { name: 'Test' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// update_user
+// ---------------------------------------------------------------------------
+
+describe('update_user', () => {
+  let mockUser;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFindById.mockReset();
+    mockUser = {
+      _id: '507f1f77bcf86cd799439012',
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+      isAdmin: false,
+      save: mockSave,
+    };
+  });
+
+  it('should update user name', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    mockSave.mockResolvedValue({ ...mockUser, name: 'Updated' });
+
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439012', name: 'Updated' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockUser.name).toBe('Updated');
+  });
+
+  it('should toggle admin status', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    mockSave.mockResolvedValue({ ...mockUser, isAdmin: true });
+
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439012', isAdmin: true },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockUser.isAdmin).toBe(true);
+  });
+
+  it('should return NOT_FOUND for non-existent user', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439099', name: 'Test' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for invalid user ID', async () => {
+    const result = await updateUser(
+      { user_id: 'bad-id', name: 'Test' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INVALID_PARAM when no update fields provided', async () => {
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439012' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return CONFLICT for duplicate email', async () => {
+    mockFindById.mockResolvedValue(mockUser);
+    const dupError = new Error('Duplicate key');
+    dupError.code = 11000;
+    mockSave.mockRejectedValue(dupError);
+
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439012', email: 'taken@example.com' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('CONFLICT');
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await updateUser(
+      { user_id: '507f1f77bcf86cd799439012', name: 'Test' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// delete_user
+// ---------------------------------------------------------------------------
+
+describe('delete_user', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFindById.mockReset();
+  });
+
+  it('should delete a non-admin user successfully', async () => {
+    mockFindById.mockResolvedValue({
+      _id: '507f1f77bcf86cd799439012',
+      name: 'Jane',
+      isAdmin: false,
+    });
+    mockDeleteOne.mockResolvedValue({ deletedCount: 1 });
+
+    const result = await deleteUser(
+      { user_id: '507f1f77bcf86cd799439012' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data.message).toBe('User removed');
+    expect(mockDeleteOne).toHaveBeenCalledWith({ _id: '507f1f77bcf86cd799439012' });
+  });
+
+  it('should prevent deleting an admin user', async () => {
+    mockFindById.mockResolvedValue({
+      _id: '507f1f77bcf86cd799439013',
+      name: 'Admin',
+      isAdmin: true,
+    });
+
+    const result = await deleteUser(
+      { user_id: '507f1f77bcf86cd799439013' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('FORBIDDEN');
+    expect(mockDeleteOne).not.toHaveBeenCalled();
+  });
+
+  it('should return NOT_FOUND for non-existent user', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await deleteUser(
+      { user_id: '507f1f77bcf86cd799439099' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for invalid user ID', async () => {
+    const result = await deleteUser(
+      { user_id: 'bad-id' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INVALID_PARAM for missing user_id', async () => {
+    const result = await deleteUser({}, mockAdminContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await deleteUser(
+      { user_id: '507f1f77bcf86cd799439012' },
+      mockAdminContext()
+    );
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('INTERNAL_ERROR');

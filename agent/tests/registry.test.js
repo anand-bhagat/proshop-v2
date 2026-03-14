@@ -164,7 +164,12 @@ describe('executeTool()', () => {
     expect(result.action).toBe('addToCart');
   });
 
-  it('should return NOT_IMPLEMENTED for unimplemented backend tools', async () => {
+  it('should return NOT_IMPLEMENTED for a backend tool with null handler', async () => {
+    // Temporarily null a handler to test the guard
+    const entry = getToolEntry('create_product');
+    const originalHandler = entry.handler;
+    entry.handler = null;
+
     const result = await executeTool(
       'create_product',
       {},
@@ -172,6 +177,9 @@ describe('executeTool()', () => {
     );
     expect(result.success).toBe(false);
     expect(result.code).toBe('NOT_IMPLEMENTED');
+
+    // Restore
+    entry.handler = originalHandler;
   });
 });
 

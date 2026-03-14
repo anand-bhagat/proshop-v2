@@ -80,4 +80,159 @@ async function getTopProducts(params, context) {
   }
 }
 
-export { getProduct, searchProducts, getTopProducts };
+/**
+ * Tool: create_product
+ * Create a new product with sample placeholder values.
+ * Access: admin
+ */
+async function createProduct(params, context) {
+  try {
+    const product = new Product({
+      name: 'Sample name',
+      price: 0,
+      user: context.userId,
+      image: '/images/sample.jpg',
+      brand: 'Sample brand',
+      category: 'Sample category',
+      countInStock: 0,
+      numReviews: 0,
+      description: 'Sample description',
+    });
+
+    const createdProduct = await product.save();
+    return successResponse(createdProduct);
+  } catch (err) {
+    return errorResponse(`Failed to create product: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Tool: update_product
+ * Update an existing product's details. Only provided fields are updated.
+ * Access: admin
+ */
+async function updateProduct(params, context) {
+  const { product_id, name, price, description, image, brand, category, countInStock } = params;
+
+  if (!product_id || !isValidObjectId(product_id)) {
+    return errorResponse('Invalid or missing product ID', 'INVALID_PARAM');
+  }
+
+  try {
+    const product = await Product.findById(product_id);
+
+    if (!product) {
+      return errorResponse(`Product ${product_id} not found`, 'NOT_FOUND');
+    }
+
+    // Only update fields that were explicitly provided (partial update)
+    if (name !== undefined) product.name = name;
+    if (price !== undefined) product.price = price;
+    if (description !== undefined) product.description = description;
+    if (image !== undefined) product.image = image;
+    if (brand !== undefined) product.brand = brand;
+    if (category !== undefined) product.category = category;
+    if (countInStock !== undefined) product.countInStock = countInStock;
+
+    const updatedProduct = await product.save();
+    return successResponse(updatedProduct);
+  } catch (err) {
+    return errorResponse(`Failed to update product: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Tool: submit_review
+ * Submit or update a review for a product (upsert behavior).
+ * Access: authenticated
+ */
+async function submitReview(params, context) {
+  const { product_id, rating, comment } = params;
+
+  if (!product_id || !isValidObjectId(product_id)) {
+    return errorResponse('Invalid or missing product ID', 'INVALID_PARAM');
+  }
+
+  if (!rating || rating < 1 || rating > 5) {
+    return errorResponse('Rating must be an integer between 1 and 5', 'INVALID_PARAM');
+  }
+
+  if (!comment || comment.trim().length === 0) {
+    return errorResponse('Comment must not be empty', 'INVALID_PARAM');
+  }
+
+  try {
+    const product = await Product.findById(product_id);
+
+    if (!product) {
+      return errorResponse(`Product ${product_id} not found`, 'NOT_FOUND');
+    }
+
+    const alreadyReviewed = product.reviews.find(
+      (r) => r.user.toString() === context.userId.toString()
+    );
+
+    if (alreadyReviewed) {
+      // Upsert: update existing review
+      alreadyReviewed.name = context.name;
+      alreadyReviewed.rating = Number(rating);
+      alreadyReviewed.comment = comment;
+    } else {
+      // Create new review
+      const review = {
+        name: context.name,
+        rating: Number(rating),
+        comment,
+        user: context.userId,
+      };
+      product.reviews.push(review);
+    }
+
+    // Recalculate aggregate values
+    product.numReviews = product.reviews.length;
+    product.rating =
+      product.reviews.reduce((acc, item) => item.rating + acc, 0) /
+      product.reviews.length;
+
+    await product.save();
+    return successResponse({ message: 'Review added' });
+  } catch (err) {
+    return errorResponse(`Failed to submit review: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Tool: delete_product
+ * Permanently delete a product from the catalog.
+ * Access: admin, confirmBefore: true
+ */
+async function deleteProduct(params, context) {
+  const { product_id } = params;
+
+  if (!product_id || !isValidObjectId(product_id)) {
+    return errorResponse('Invalid or missing product ID', 'INVALID_PARAM');
+  }
+
+  try {
+    const product = await Product.findById(product_id);
+
+    if (!product) {
+      return errorResponse(`Product ${product_id} not found`, 'NOT_FOUND');
+    }
+
+    await Product.deleteOne({ _id: product._id });
+    return successResponse({ message: 'Product removed' });
+  } catch (err) {
+    return errorResponse(`Failed to delete product: ${err.message}`, 'INTERNAL_ERROR');
+  }
+}
+
+export {
+  getProduct,
+  searchProducts,
+  getTopProducts,
+  createProduct,
+  updateProduct,
+  submitReview,
+  deleteProduct,
+};

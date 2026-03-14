@@ -9,18 +9,33 @@ const mockSkip = jest.fn();
 const mockLimit = jest.fn();
 const mockSort = jest.fn();
 const mockFind = jest.fn();
+const mockSave = jest.fn();
+const mockDeleteOne = jest.fn();
+
+// Mock Product constructor for create_product
+let mockProductInstance;
+const MockProduct = jest.fn().mockImplementation((data) => {
+  mockProductInstance = { ...data, _id: '507f1f77bcf86cd799439099', save: mockSave };
+  return mockProductInstance;
+});
+MockProduct.findById = mockFindById;
+MockProduct.find = mockFind;
+MockProduct.countDocuments = mockCountDocuments;
+MockProduct.deleteOne = mockDeleteOne;
 
 jest.unstable_mockModule('../../../backend/models/productModel.js', () => ({
-  default: {
-    findById: mockFindById,
-    find: mockFind,
-    countDocuments: mockCountDocuments,
-  },
+  default: MockProduct,
 }));
 
-const { getProduct, searchProducts, getTopProducts } = await import(
-  '../../tools/products.js'
-);
+const {
+  getProduct,
+  searchProducts,
+  getTopProducts,
+  createProduct,
+  updateProduct,
+  submitReview,
+  deleteProduct,
+} = await import('../../tools/products.js');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -303,6 +318,349 @@ describe('get_top_products', () => {
     mockFind.mockReturnValue({ sort: mockSort });
 
     const result = await getTopProducts({}, mockContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// create_product
+// ---------------------------------------------------------------------------
+
+describe('create_product', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should create a product with sample placeholder values', async () => {
+    const savedProduct = {
+      _id: '507f1f77bcf86cd799439099',
+      name: 'Sample name',
+      price: 0,
+      user: '507f1f77bcf86cd799439011',
+      image: '/images/sample.jpg',
+      brand: 'Sample brand',
+      category: 'Sample category',
+      countInStock: 0,
+      numReviews: 0,
+      description: 'Sample description',
+    };
+    mockSave.mockResolvedValue(savedProduct);
+
+    const result = await createProduct({}, mockContext());
+
+    expect(result.success).toBe(true);
+    expect(result.data.name).toBe('Sample name');
+    expect(result.data.price).toBe(0);
+    expect(result.data.user).toBe('507f1f77bcf86cd799439011');
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it('should use the authenticated user ID from context', async () => {
+    const ctx = mockContext({ userId: 'aabbccddeeff00112233aabb' });
+    mockSave.mockResolvedValue({ _id: '507f1f77bcf86cd799439099', user: ctx.userId });
+
+    await createProduct({}, ctx);
+
+    expect(MockProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ user: 'aabbccddeeff00112233aabb' })
+    );
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockSave.mockRejectedValue(new Error('DB error'));
+
+    const result = await createProduct({}, mockContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// update_product
+// ---------------------------------------------------------------------------
+
+describe('update_product', () => {
+  let mockProduct;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockProduct = {
+      _id: '507f1f77bcf86cd799439011',
+      name: 'Original Name',
+      price: 99.99,
+      description: 'Original desc',
+      image: '/images/orig.jpg',
+      brand: 'OrigBrand',
+      category: 'Electronics',
+      countInStock: 5,
+      save: mockSave,
+    };
+  });
+
+  it('should update a single field', async () => {
+    mockFindById.mockResolvedValue(mockProduct);
+    mockSave.mockResolvedValue({ ...mockProduct, name: 'Updated Name' });
+
+    const result = await updateProduct(
+      { product_id: '507f1f77bcf86cd799439011', name: 'Updated Name' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockProduct.name).toBe('Updated Name');
+    // Other fields should remain unchanged
+    expect(mockProduct.price).toBe(99.99);
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it('should update multiple fields', async () => {
+    mockFindById.mockResolvedValue(mockProduct);
+    mockSave.mockResolvedValue({ ...mockProduct, name: 'New', price: 49.99 });
+
+    const result = await updateProduct(
+      { product_id: '507f1f77bcf86cd799439011', name: 'New', price: 49.99 },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockProduct.name).toBe('New');
+    expect(mockProduct.price).toBe(49.99);
+  });
+
+  it('should allow setting price to 0', async () => {
+    mockFindById.mockResolvedValue(mockProduct);
+    mockSave.mockResolvedValue({ ...mockProduct, price: 0 });
+
+    const result = await updateProduct(
+      { product_id: '507f1f77bcf86cd799439011', price: 0 },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockProduct.price).toBe(0);
+  });
+
+  it('should return NOT_FOUND for non-existent product', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await updateProduct(
+      { product_id: '507f1f77bcf86cd799439012', name: 'Test' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for invalid product ID', async () => {
+    const result = await updateProduct(
+      { product_id: 'bad-id', name: 'Test' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await updateProduct(
+      { product_id: '507f1f77bcf86cd799439011', name: 'Test' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// submit_review
+// ---------------------------------------------------------------------------
+
+describe('submit_review', () => {
+  let mockProduct;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockProduct = {
+      _id: '507f1f77bcf86cd799439011',
+      reviews: [],
+      numReviews: 0,
+      rating: 0,
+      save: mockSave,
+    };
+  });
+
+  it('should create a new review', async () => {
+    mockFindById.mockResolvedValue(mockProduct);
+    mockSave.mockResolvedValue(mockProduct);
+
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 5, comment: 'Great!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data.message).toBe('Review added');
+    expect(mockProduct.reviews).toHaveLength(1);
+    expect(mockProduct.reviews[0].rating).toBe(5);
+    expect(mockProduct.reviews[0].comment).toBe('Great!');
+    expect(mockProduct.numReviews).toBe(1);
+    expect(mockProduct.rating).toBe(5);
+  });
+
+  it('should update an existing review (upsert)', async () => {
+    mockProduct.reviews = [
+      {
+        user: { toString: () => '507f1f77bcf86cd799439011' },
+        name: 'Test User',
+        rating: 3,
+        comment: 'OK',
+      },
+    ];
+    mockProduct.numReviews = 1;
+    mockProduct.rating = 3;
+    mockFindById.mockResolvedValue(mockProduct);
+    mockSave.mockResolvedValue(mockProduct);
+
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 5, comment: 'Amazing!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    // Should still be 1 review (updated, not added)
+    expect(mockProduct.reviews).toHaveLength(1);
+    expect(mockProduct.reviews[0].rating).toBe(5);
+    expect(mockProduct.reviews[0].comment).toBe('Amazing!');
+    expect(mockProduct.numReviews).toBe(1);
+  });
+
+  it('should return NOT_FOUND for non-existent product', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439012', rating: 5, comment: 'Great!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for rating of 0', async () => {
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 0, comment: 'Bad' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return INVALID_PARAM for rating above 5', async () => {
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 6, comment: 'Great!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return INVALID_PARAM for empty comment', async () => {
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 5, comment: '' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return INVALID_PARAM for invalid product ID', async () => {
+    const result = await submitReview(
+      { product_id: 'bad-id', rating: 5, comment: 'Great!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await submitReview(
+      { product_id: '507f1f77bcf86cd799439011', rating: 5, comment: 'Great!' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// delete_product
+// ---------------------------------------------------------------------------
+
+describe('delete_product', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should delete a product successfully', async () => {
+    mockFindById.mockResolvedValue({ _id: '507f1f77bcf86cd799439011', name: 'Test' });
+    mockDeleteOne.mockResolvedValue({ deletedCount: 1 });
+
+    const result = await deleteProduct(
+      { product_id: '507f1f77bcf86cd799439011' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data.message).toBe('Product removed');
+    expect(mockDeleteOne).toHaveBeenCalledWith({ _id: '507f1f77bcf86cd799439011' });
+  });
+
+  it('should return NOT_FOUND for non-existent product', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await deleteProduct(
+      { product_id: '507f1f77bcf86cd799439012' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for invalid product ID', async () => {
+    const result = await deleteProduct(
+      { product_id: 'bad-id' },
+      mockContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await deleteProduct(
+      { product_id: '507f1f77bcf86cd799439011' },
+      mockContext()
+    );
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('INTERNAL_ERROR');

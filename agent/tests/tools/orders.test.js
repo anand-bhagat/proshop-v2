@@ -4,13 +4,14 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 // Mock the Order model before importing handlers
 const mockPopulate = jest.fn();
+const mockSave = jest.fn();
 const mockFindById = jest.fn(() => ({ populate: mockPopulate }));
 const mockFind = jest.fn();
 jest.unstable_mockModule('../../../backend/models/orderModel.js', () => ({
   default: { findById: mockFindById, find: mockFind },
 }));
 
-const { getOrder, getMyOrders, listOrders } = await import(
+const { getOrder, getMyOrders, listOrders, markOrderDelivered } = await import(
   '../../tools/orders.js'
 );
 
@@ -258,6 +259,105 @@ describe('list_orders', () => {
     mockFind.mockReturnValue({ populate: mockPopulate });
 
     const result = await listOrders({}, mockAdminContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mark_order_delivered
+// ---------------------------------------------------------------------------
+
+describe('mark_order_delivered', () => {
+  let mockOrder;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOrder = {
+      _id: '507f1f77bcf86cd799439022',
+      user: '507f1f77bcf86cd799439011',
+      totalPrice: 114.98,
+      isPaid: true,
+      isDelivered: false,
+      deliveredAt: null,
+      save: mockSave,
+    };
+    // mark_order_delivered calls findById directly (no .populate chain)
+    mockFindById.mockReset();
+  });
+
+  it('should mark an order as delivered', async () => {
+    mockFindById.mockResolvedValue(mockOrder);
+    mockSave.mockResolvedValue({
+      ...mockOrder,
+      isDelivered: true,
+      deliveredAt: new Date(),
+    });
+
+    const result = await markOrderDelivered(
+      { order_id: '507f1f77bcf86cd799439022' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockOrder.isDelivered).toBe(true);
+    expect(mockOrder.deliveredAt).toBeDefined();
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it('should handle already delivered order (overwrites timestamp)', async () => {
+    mockOrder.isDelivered = true;
+    mockOrder.deliveredAt = new Date('2024-01-15');
+    mockFindById.mockResolvedValue(mockOrder);
+    mockSave.mockResolvedValue(mockOrder);
+
+    const result = await markOrderDelivered(
+      { order_id: '507f1f77bcf86cd799439022' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockOrder.isDelivered).toBe(true);
+  });
+
+  it('should return NOT_FOUND for non-existent order', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const result = await markOrderDelivered(
+      { order_id: '507f1f77bcf86cd799439099' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_FOUND');
+  });
+
+  it('should return INVALID_PARAM for invalid order ID', async () => {
+    const result = await markOrderDelivered(
+      { order_id: 'bad-id' },
+      mockAdminContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+    expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it('should return INVALID_PARAM for missing order_id', async () => {
+    const result = await markOrderDelivered({}, mockAdminContext());
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  it('should return INTERNAL_ERROR on database failure', async () => {
+    mockFindById.mockRejectedValue(new Error('DB error'));
+
+    const result = await markOrderDelivered(
+      { order_id: '507f1f77bcf86cd799439022' },
+      mockAdminContext()
+    );
 
     expect(result.success).toBe(false);
     expect(result.code).toBe('INTERNAL_ERROR');

@@ -17,6 +17,11 @@ import { searchProducts, getTopProducts } from './tools/products.js';
 import { getMyOrders, listOrders } from './tools/orders.js';
 import { listUsers } from './tools/users.js';
 
+// Phase 5: Write Tool handlers
+import { createProduct, updateProduct, submitReview, deleteProduct } from './tools/products.js';
+import { markOrderDelivered } from './tools/orders.js';
+import { updateUserProfile, updateUser, deleteUser } from './tools/users.js';
+
 // ---------------------------------------------------------------------------
 // Tool Definitions — 17 backend + 11 frontend
 // ---------------------------------------------------------------------------
@@ -93,7 +98,7 @@ const tools = {
   create_product: {
     description:
       'Create a new product with sample placeholder values. Admin only. No parameters needed — creates a template product that can be updated afterward.',
-    handler: null, // Phase 5
+    handler: createProduct,
     schema: {
       type: 'object',
       required: [],
@@ -109,7 +114,7 @@ const tools = {
   update_product: {
     description:
       'Update an existing product\'s details. Admin only. Provide product_id and any fields to update (name, price, description, image, brand, category, countInStock).',
-    handler: null, // Phase 5
+    handler: updateProduct,
     schema: {
       type: 'object',
       required: ['product_id'],
@@ -155,7 +160,7 @@ const tools = {
   delete_product: {
     description:
       'Permanently delete a product from the catalog by its MongoDB ObjectId. Admin only. Requires user confirmation before execution.',
-    handler: null, // Phase 5
+    handler: deleteProduct,
     schema: {
       type: 'object',
       required: ['product_id'],
@@ -177,7 +182,7 @@ const tools = {
   submit_review: {
     description:
       'Submit or update a review for a product. Authenticated users only. Provide product_id, rating (1-5), and a comment. If the user already reviewed this product, the existing review is updated.',
-    handler: null, // Phase 5
+    handler: submitReview,
     schema: {
       type: 'object',
       required: ['product_id', 'rating', 'comment'],
@@ -264,7 +269,7 @@ const tools = {
   mark_order_delivered: {
     description:
       'Mark an order as delivered by setting its delivery status and recording the timestamp. Admin only.',
-    handler: null, // Phase 5
+    handler: markOrderDelivered,
     schema: {
       type: 'object',
       required: ['order_id'],
@@ -343,7 +348,7 @@ const tools = {
   update_user_profile: {
     description:
       'Update the currently authenticated user\'s own profile. Only name and email can be changed. Password is excluded for security.',
-    handler: null, // Phase 5
+    handler: updateUserProfile,
     schema: {
       type: 'object',
       required: [],
@@ -372,7 +377,7 @@ const tools = {
   update_user: {
     description:
       'Update any user\'s account details by their ID. Admin only. Can change name, email, and admin status.',
-    handler: null, // Phase 5
+    handler: updateUser,
     schema: {
       type: 'object',
       required: ['user_id'],
@@ -408,7 +413,7 @@ const tools = {
   delete_user: {
     description:
       'Delete a user account by user ID. Admin only. Requires user confirmation before execution.',
-    handler: null, // Phase 5
+    handler: deleteUser,
     schema: {
       type: 'object',
       required: ['user_id'],
