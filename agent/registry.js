@@ -370,7 +370,6 @@ const tools = {
         },
         email: {
           type: 'string',
-          format: 'email',
           description:
             'The new email address. If omitted, the current email is kept.',
         },
@@ -403,7 +402,6 @@ const tools = {
         },
         email: {
           type: 'string',
-          format: 'email',
           description: 'The new email address for the user.',
         },
         isAdmin: {
@@ -441,6 +439,25 @@ const tools = {
   },
 
   // ── Cart (frontend) ────────────────────────────────────────────────────
+
+  get_cart: {
+    description:
+      'Get the current contents of the shopping cart. Returns all items with their names, quantities, prices, and IDs. Use this to view the cart or before removing items. Do not call this before adding items.',
+    handler: null,
+    schema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+    execution: 'frontend',
+    access: 'public',
+    category: 'cart',
+    confirmBefore: false,
+    frontendAction: {
+      type: 'read',
+      store: 'cart',
+    },
+  },
 
   add_to_cart: {
     description:

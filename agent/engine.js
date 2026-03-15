@@ -34,6 +34,7 @@ const TOOL_STATUS_MESSAGES = {
   update_user: '✏️ Updating user...',
   delete_user: '🗑️ Deleting user...',
   // Frontend — Cart
+  get_cart: '🛒 Checking cart...',
   add_to_cart: '🛒 Adding to cart...',
   remove_from_cart: '🛒 Removing from cart...',
   clear_cart: '🛒 Clearing cart...',
@@ -229,11 +230,14 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
     // If LLM wants to call tools
     if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
       // Add assistant message with tool calls to history
-      truncated.push({
+      const assistantMsg = {
         role: 'assistant',
         content: llmResponse.content || '',
         tool_calls: llmResponse.toolCalls,
-      });
+      };
+      truncated.push(assistantMsg);
+
+      const iterationToolResults = [];
 
       for (const toolCall of llmResponse.toolCalls) {
         toolCall.params = coerceToolParams(toolCall.params, toolCall.name);
@@ -243,6 +247,8 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
 
         // Frontend tool routing — return action to widget
         if (result.type === 'frontend_action') {
+          // Persist conversation so history is intact on callback
+          conversation.messages.push(assistantMsg, ...iterationToolResults);
           return {
             type: 'frontend_action',
             toolCallId: toolCall.id,
@@ -258,11 +264,13 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
           result,
         });
 
-        truncated.push({
+        const toolMsg = {
           role: 'tool',
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
-        });
+        };
+        truncated.push(toolMsg);
+        iterationToolResults.push(toolMsg);
       }
 
       continue; // Loop — LLM may need more tools
@@ -412,11 +420,16 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
       console.log(`[AGENT ${llmEnd}] LLM response complete - ${toolCalls.length} tool calls (${llmDuration}ms)`);
 
       if (toolCalls.length > 0) {
-        truncated.push({
+        const assistantMsg = {
           role: 'assistant',
           content: fullContent || '',
           tool_calls: toolCalls,
-        });
+        };
+        truncated.push(assistantMsg);
+
+        // Track tool results for this iteration so we can persist them
+        // if a frontend action interrupts the loop.
+        const iterationToolResults = [];
 
         for (const toolCall of toolCalls) {
           // Status: executing tool
@@ -433,6 +446,10 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
           console.log(`[AGENT ${Date.now()}] Tool ${toolCall.name} complete (${toolDuration}ms)`);
 
           if (result.type === 'frontend_action') {
+            // Persist the assistant message + any backend tool results
+            // already computed so the conversation history is intact
+            // when the frontend sends the result back.
+            conversation.messages.push(assistantMsg, ...iterationToolResults);
             yield { event: 'frontend_action', data: { toolCallId: toolCall.id, ...result, conversationId: conversation.id } };
             return;
           }
@@ -440,11 +457,13 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
           toolResults.push({ tool: toolCall.name, result });
           yield { event: 'tool_result', data: { tool: toolCall.name, result } };
 
-          truncated.push({
+          const toolMsg = {
             role: 'tool',
             tool_call_id: toolCall.id,
             content: JSON.stringify(result),
-          });
+          };
+          truncated.push(toolMsg);
+          iterationToolResults.push(toolMsg);
         }
 
         continue;

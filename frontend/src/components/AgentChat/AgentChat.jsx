@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { addToCart, removeFromCart, clearCartItems } from '../../slices/cartSlice';
+import { setCredentials } from '../../slices/authSlice';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import './AgentChat.css';
@@ -49,6 +50,7 @@ const AgentChat = ({ onShowWelcome }) => {
   const [error, setError] = useState(null);
 
   const { userInfo } = useSelector((state) => state.auth);
+  const { cartItems } = useSelector((state) => state.cart);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -102,9 +104,14 @@ const AgentChat = ({ onShowWelcome }) => {
           message: `Added ${product.name} (qty: ${params.qty}) to cart`,
         };
       }
-      case 'removeFromCart':
+      case 'removeFromCart': {
+        const item = cartItems.find((x) => x._id === params.product_id);
+        if (!item) {
+          return { success: false, error: 'Item not in cart' };
+        }
         dispatch(removeFromCart(params.product_id));
-        return { success: true, message: 'Item removed from cart' };
+        return { success: true, message: `Removed ${item.name} from cart` };
+      }
       case 'clearCartItems':
         dispatch(clearCartItems());
         return { success: true, message: 'Cart cleared' };
@@ -123,6 +130,18 @@ const AgentChat = ({ onShowWelcome }) => {
     }
     navigate(resolved);
     return { success: true, message: `Navigated to ${resolved}` };
+  };
+
+  // ── Frontend state read ─────────────────────────────────────────────
+
+  const executeFrontendRead = (store) => {
+    if (store === 'cart') {
+      const items = cartItems.map(({ _id, name, qty, price, image, countInStock }) => ({
+        _id, name, qty, price, image, countInStock,
+      }));
+      return { success: true, data: { cartItems: items, itemCount: items.length } };
+    }
+    return { success: false, error: `Unknown store: ${store}` };
   };
 
   // ── Handle agent response (recursive for agentic loop) ─────────────
@@ -212,10 +231,18 @@ const AgentChat = ({ onShowWelcome }) => {
                 m.id === capturedId ? { ...m, content: capturedContent } : m
               )
             );
-          } else if (event.type === 'tool_start' || event.type === 'tool_result') {
-            // Intermediate agentic loop events — status already handled by engine
+          } else if (event.type === 'tool_start') {
+            // Intermediate agentic loop event — status already handled by engine
+          } else if (event.type === 'tool_result') {
+            // Sync frontend state when backend tools modify user data
+            if (event.tool === 'update_user_profile' && event.result?.success) {
+              dispatch(setCredentials({ ...userInfo, ...event.result.data }));
+            }
           } else if (event.type === 'frontend_action') {
-            setStatusMessage(null);
+            if (event.conversationId) {
+              setConversationId(event.conversationId);
+              conversationIdRef.current = event.conversationId;
+            }
             await handleFrontendAction(event);
             return;
           } else if (event.type === 'error') {
@@ -282,6 +309,8 @@ const AgentChat = ({ onShowWelcome }) => {
         result = await executeFrontendDispatch(action, params);
       } else if (actionType === 'navigate') {
         result = executeFrontendNavigate(route, params);
+      } else if (actionType === 'read') {
+        result = executeFrontendRead(data.store);
       } else {
         result = { success: false, error: `Unknown action type: ${actionType}` };
       }

@@ -47,7 +47,14 @@ async function searchProducts(params, context) {
 
   try {
     const filter = keyword
-      ? { name: { $regex: escapeRegex(keyword), $options: 'i' } }
+      ? {
+          $or: [
+            { name: { $regex: escapeRegex(keyword), $options: 'i' } },
+            { brand: { $regex: escapeRegex(keyword), $options: 'i' } },
+            { category: { $regex: escapeRegex(keyword), $options: 'i' } },
+            { description: { $regex: escapeRegex(keyword), $options: 'i' } },
+          ],
+        }
       : {};
 
     const count = await Product.countDocuments(filter);
