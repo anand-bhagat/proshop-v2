@@ -15,6 +15,16 @@ const router = express.Router();
 
 const rateLimitStore = new Map(); // userId -> { minute: { count, resetAt }, hour: { count, resetAt } }
 
+// Clean up stale rate limit entries every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of rateLimitStore) {
+    if (now > entry.minute.resetAt && now > entry.hour.resetAt) {
+      rateLimitStore.delete(userId);
+    }
+  }
+}, 10 * 60_000);
+
 function checkRateLimit(userId) {
   const now = Date.now();
   let entry = rateLimitStore.get(userId);
@@ -69,6 +79,11 @@ router.post(
     if (message && typeof message !== 'string') {
       res.status(400);
       throw new Error('"message" must be a string');
+    }
+
+    if (message && message.length > 2000) {
+      res.status(400);
+      throw new Error('Message must be 2000 characters or fewer');
     }
 
     // Rate limiting

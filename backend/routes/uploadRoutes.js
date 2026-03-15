@@ -1,6 +1,7 @@
 import path from 'path';
 import express from 'express';
 import multer from 'multer';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -30,10 +31,14 @@ function fileFilter(req, file, cb) {
   }
 }
 
-const upload = multer({ storage, fileFilter });
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+});
 const uploadSingleImage = upload.single('image');
 
-router.post('/', (req, res) => {
+router.post('/', protect, (req, res) => {
   uploadSingleImage(req, res, function (err) {
     if (err) {
       return res.status(400).send({ message: err.message });

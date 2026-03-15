@@ -1,0 +1,12 @@
+node_modules
+frontend/node_modules
+frontend/build
+.env
+.git
+.gitignore
+*.md
+agent/tests
+agent-sop-framework
+http
+uploads
+.claude

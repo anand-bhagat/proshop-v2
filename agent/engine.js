@@ -119,18 +119,46 @@ async function callLLM(messages, toolDefs) {
 // Conversation Memory
 // ---------------------------------------------------------------------------
 
-/** In-memory conversation store. Replace with MongoDB in production (see Conversation model). */
+/** In-memory conversation store with TTL eviction. */
 const conversations = new Map();
+const CONVERSATION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_CONVERSATIONS = 500;
+
+// Evict expired conversations every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, conv] of conversations) {
+    if (now - conv.lastAccessedAt > CONVERSATION_TTL_MS) {
+      conversations.delete(id);
+    }
+  }
+}, 5 * 60_000);
 
 /**
  * Get or create a conversation.
  */
 function getConversation(conversationId) {
   if (conversationId && conversations.has(conversationId)) {
-    return conversations.get(conversationId);
+    const conv = conversations.get(conversationId);
+    conv.lastAccessedAt = Date.now();
+    return conv;
   }
+
+  // Evict oldest if at capacity
+  if (conversations.size >= MAX_CONVERSATIONS) {
+    let oldestId = null;
+    let oldestTime = Infinity;
+    for (const [id, conv] of conversations) {
+      if (conv.lastAccessedAt < oldestTime) {
+        oldestTime = conv.lastAccessedAt;
+        oldestId = id;
+      }
+    }
+    if (oldestId) conversations.delete(oldestId);
+  }
+
   const id = conversationId || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const conv = { id, messages: [], createdAt: new Date() };
+  const conv = { id, messages: [], createdAt: new Date(), lastAccessedAt: Date.now() };
   conversations.set(id, conv);
   return conv;
 }
