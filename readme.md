@@ -2,7 +2,7 @@
 
 > A full-stack e-commerce platform with an AI-powered shopping assistant, built on top of [Brad Traversy's ProShop v2](https://github.com/bradtraversy/proshop-v2).
 
-<img src="./frontend/public/images/screens.png">
+<img src="./frontend/public/images/screens.gif">
 
 ## What I Built
 
