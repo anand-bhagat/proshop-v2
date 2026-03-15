@@ -1,6 +1,8 @@
 # ProShop v2 — AI Agent Edition
 
 > A full-stack e-commerce platform with an AI-powered shopping assistant, built on top of [Brad Traversy's ProShop v2](https://github.com/bradtraversy/proshop-v2).
+>
+> **Live Demo:** [proshop.anandbhagat.com](https://proshop.anandbhagat.com/)
 
 <img src="./frontend/public/images/screens.gif">
 
