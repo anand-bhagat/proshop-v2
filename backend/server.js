@@ -2,8 +2,10 @@ import path from 'path';
 import express from 'express';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import cron from 'node-cron';
 dotenv.config();
 import connectDB from './config/db.js';
+import resetDb from './utils/resetDb.js';
 import productRoutes from './routes/productRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
@@ -49,6 +51,13 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(notFound);
 app.use(errorHandler);
+
+// Hourly DB reset — runs at minute 0 of every hour
+cron.schedule('0 * * * *', () => {
+  console.log('Running scheduled database reset...');
+  resetDb();
+});
+console.log('DB reset scheduled: runs every hour on the hour');
 
 app.listen(port, () =>
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${port}`)

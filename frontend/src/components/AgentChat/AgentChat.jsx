@@ -27,7 +27,21 @@ const SUGGESTED_PROMPTS = {
 
 // ── Component ──────────────────────────────────────────────────────────
 
-const AgentChat = () => {
+const friendlyErrorMessage = (msg) => {
+  if (!msg) return 'An error occurred. Please try again.';
+  const lower = msg.toLowerCase();
+  if (lower.includes('429') || lower.includes('rate limit'))
+    return 'The LLM API is temporarily unavailable due to rate limits — please try again shortly.';
+  if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('econnrefused'))
+    return 'Network error — please check your connection and try again.';
+  if (lower.includes('llm') || lower.includes('model') || lower.includes('provider') || lower.includes('500'))
+    return 'The LLM API is temporarily unavailable — please try again shortly.';
+  if (lower.includes('token') || lower.includes('unauthorized') || lower.includes('401'))
+    return 'Session expired — please log in again.';
+  return msg;
+};
+
+const AgentChat = ({ onShowWelcome }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -431,7 +445,7 @@ const AgentChat = () => {
           <div className='agent-chat-header'>
             <span>ProShop Assistant</span>
             <div>
-              {messages.length > 0 && (
+              {messages.length > 0 && userInfo && (
                 <button
                   className='agent-chat-clear-btn'
                   onClick={clearConversation}
@@ -450,33 +464,50 @@ const AgentChat = () => {
             </div>
           </div>
 
-          <MessageList
-            messages={messages}
-            isLoading={isLoading}
-            statusMessage={statusMessage}
-            suggestedPrompts={messages.length === 0 ? prompts : null}
-            onSuggestedPrompt={handleSend}
-          />
-
-          {pendingConfirmation && (
-            <ConfirmationDialog
-              confirmation={pendingConfirmation}
-              onConfirm={handleConfirm}
-              onCancel={handleCancel}
-            />
-          )}
-
-          {error && (
-            <div className='agent-chat-error'>
-              <span>{error}</span>
-              <button onClick={retryLastMessage}>Retry</button>
+          {!userInfo ? (
+            <div className='agent-chat-login-guard'>
+              <p>Login with demo credentials to use the AI agent</p>
+              <button
+                className='agent-chat-login-guard-btn'
+                onClick={() => {
+                  setIsOpen(false);
+                  if (onShowWelcome) onShowWelcome();
+                }}
+              >
+                View Demo Credentials
+              </button>
             </div>
-          )}
+          ) : (
+            <>
+              <MessageList
+                messages={messages}
+                isLoading={isLoading}
+                statusMessage={statusMessage}
+                suggestedPrompts={messages.length === 0 ? prompts : null}
+                onSuggestedPrompt={handleSend}
+              />
 
-          <ChatInput
-            onSend={handleSend}
-            disabled={isLoading || !!pendingConfirmation}
-          />
+              {pendingConfirmation && (
+                <ConfirmationDialog
+                  confirmation={pendingConfirmation}
+                  onConfirm={handleConfirm}
+                  onCancel={handleCancel}
+                />
+              )}
+
+              {error && (
+                <div className='agent-chat-error'>
+                  <span>{friendlyErrorMessage(error)}</span>
+                  <button onClick={retryLastMessage}>Retry</button>
+                </div>
+              )}
+
+              <ChatInput
+                onSend={handleSend}
+                disabled={isLoading || !!pendingConfirmation}
+              />
+            </>
+          )}
         </div>
       )}
     </>

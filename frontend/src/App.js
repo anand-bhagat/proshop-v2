@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Container } from 'react-bootstrap';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AgentChat from './components/AgentChat/AgentChat';
+import WelcomeModal from './components/WelcomeModal';
 import { logout } from './slices/authSlice';
 
 import { ToastContainer } from 'react-toastify';
@@ -12,6 +13,8 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const App = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     const expirationTime = localStorage.getItem('expirationTime');
@@ -24,17 +27,34 @@ const App = () => {
     }
   }, [dispatch]);
 
+  // Auto-show welcome modal on first visit
+  useEffect(() => {
+    if (!localStorage.getItem('proshop_demo_seen')) {
+      setShowWelcome(true);
+    }
+  }, []);
+
+  const hideWelcome = () => {
+    setShowWelcome(false);
+    localStorage.setItem('proshop_demo_seen', '1');
+  };
+
   return (
     <>
       <ToastContainer />
-      <Header />
+      <Header onShowWelcome={() => setShowWelcome(true)} />
       <main className='py-3'>
         <Container>
           <Outlet />
         </Container>
       </main>
       <Footer />
-      <AgentChat />
+      <AgentChat onShowWelcome={() => setShowWelcome(true)} />
+      <WelcomeModal
+        show={showWelcome}
+        onHide={hideWelcome}
+        onLogin={() => navigate('/login')}
+      />
     </>
   );
 };

@@ -1,0 +1,201 @@
+/* ── Welcome Modal ────────────────────────────────────────────────────── */
+
+.welcome-modal .modal-content {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.welcome-modal .modal-body {
+  padding: 2rem 2rem 1.5rem;
+}
+
+.welcome-headline {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--bs-primary, #3c4c5d);
+  margin-bottom: 0.5rem;
+}
+
+.welcome-oneliner {
+  color: #555;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
+/* Credentials box */
+.welcome-credentials {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.welcome-credentials h6 {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  color: var(--bs-primary, #3c4c5d);
+}
+
+.welcome-cred-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.85rem;
+}
+
+.welcome-cred-row + .welcome-cred-row {
+  border-top: 1px solid #eee;
+}
+
+.welcome-cred-label {
+  color: #666;
+  font-weight: 500;
+  min-width: 90px;
+}
+
+.welcome-cred-value {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.82rem;
+  color: #333;
+  flex: 1;
+  margin: 0 8px;
+}
+
+.welcome-copy-btn {
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: #666;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.welcome-copy-btn:hover {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.welcome-copy-btn.copied {
+  background: #d4edda;
+  border-color: #28a745;
+  color: #28a745;
+}
+
+/* CTA button */
+.welcome-cta {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* Notes */
+.welcome-note {
+  text-align: center;
+  color: #888;
+  font-size: 0.78rem;
+  margin-bottom: 0.5rem;
+}
+
+.welcome-note-small {
+  text-align: center;
+  color: #aaa;
+  font-size: 0.7rem;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+/* Technical details collapsible */
+.welcome-details-toggle {
+  background: transparent;
+  border: none;
+  color: var(--bs-primary, #3c4c5d);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.welcome-details-toggle:hover {
+  text-decoration: underline;
+}
+
+.welcome-details-arrow {
+  font-size: 0.7rem;
+  transition: transform 0.2s;
+}
+
+.welcome-details-arrow.open {
+  transform: rotate(90deg);
+}
+
+.welcome-details-content {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.welcome-details-content h6 {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--bs-primary, #3c4c5d);
+  margin-top: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.welcome-details-content h6:first-child {
+  margin-top: 0;
+}
+
+.welcome-details-content ul {
+  margin: 0 0 0.5rem 0;
+  padding-left: 18px;
+}
+
+.welcome-details-content li {
+  margin-bottom: 2px;
+  color: #555;
+}
+
+.welcome-details-content p {
+  margin: 0 0 0.5rem 0;
+  color: #555;
+}
+
+/* GitHub link */
+.welcome-github {
+  text-align: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid #eee;
+}
+
+.welcome-github a {
+  color: var(--bs-primary, #3c4c5d);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.welcome-github a:hover {
+  text-decoration: underline;
+}
