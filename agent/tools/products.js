@@ -82,21 +82,23 @@ async function getTopProducts(params, context) {
 
 /**
  * Tool: create_product
- * Create a new product with sample placeholder values.
+ * Create a new product with user-provided values.
  * Access: admin
  */
 async function createProduct(params, context) {
+  const { name, price, category, brand, countInStock, description, image } = params;
+
   try {
     const product = new Product({
-      name: 'Sample name',
-      price: 0,
+      name,
+      price,
       user: context.userId,
-      image: '/images/sample.jpg',
-      brand: 'Sample brand',
-      category: 'Sample category',
-      countInStock: 0,
+      image: image || '/images/sample.jpg',
+      brand,
+      category,
+      countInStock,
       numReviews: 0,
-      description: 'Sample description',
+      description: description || '',
     });
 
     const createdProduct = await product.save();

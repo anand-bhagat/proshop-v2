@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { addToCart, removeFromCart, clearCartItems } from '../../slices/cartSlice';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
-import ConfirmationDialog from './ConfirmationDialog';
 import './AgentChat.css';
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -48,7 +47,6 @@ const AgentChat = ({ onShowWelcome }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
   const [error, setError] = useState(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
   const { userInfo } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
@@ -135,10 +133,7 @@ const AgentChat = ({ onShowWelcome }) => {
       conversationIdRef.current = data.conversationId;
     }
 
-    if (data.type === 'confirmation_needed') {
-      setPendingConfirmation(data);
-      setIsLoading(false);
-    } else if (data.type === 'frontend_action') {
+    if (data.type === 'frontend_action') {
       await handleFrontendAction(data);
     } else if (data.type === 'response') {
       setMessages((prev) => [
@@ -222,11 +217,6 @@ const AgentChat = ({ onShowWelcome }) => {
           } else if (event.type === 'frontend_action') {
             setStatusMessage(null);
             await handleFrontendAction(event);
-            return;
-          } else if (event.type === 'confirmation_needed') {
-            setStatusMessage(null);
-            setPendingConfirmation(event);
-            setIsLoading(false);
             return;
           } else if (event.type === 'error') {
             setStatusMessage(null);
@@ -368,36 +358,6 @@ const AgentChat = ({ onShowWelcome }) => {
     }
   };
 
-  // ── Confirmation handlers ──────────────────────────────────────────
-
-  const handleConfirm = async (confirmation) => {
-    setPendingConfirmation(null);
-    setIsLoading(true);
-    try {
-      const data = await callAgentApi({
-        message: `Yes, confirmed: ${confirmation.tool}`,
-        conversationId: conversationIdRef.current,
-      });
-      await handleAgentResponse(data);
-    } catch (err) {
-      setError(err.message);
-      setIsLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setPendingConfirmation(null);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        role: 'agent',
-        content: 'Action cancelled.',
-        timestamp: Date.now(),
-      },
-    ]);
-  };
-
   // ── Clear conversation ─────────────────────────────────────────────
 
   const clearConversation = () => {
@@ -405,7 +365,6 @@ const AgentChat = ({ onShowWelcome }) => {
     setConversationId(null);
     conversationIdRef.current = null;
     setError(null);
-    setPendingConfirmation(null);
   };
 
   // ── Retry last message ─────────────────────────────────────────────
@@ -487,14 +446,6 @@ const AgentChat = ({ onShowWelcome }) => {
                 onSuggestedPrompt={handleSend}
               />
 
-              {pendingConfirmation && (
-                <ConfirmationDialog
-                  confirmation={pendingConfirmation}
-                  onConfirm={handleConfirm}
-                  onCancel={handleCancel}
-                />
-              )}
-
               {error && (
                 <div className='agent-chat-error'>
                   <span>{friendlyErrorMessage(error)}</span>
@@ -504,7 +455,7 @@ const AgentChat = ({ onShowWelcome }) => {
 
               <ChatInput
                 onSend={handleSend}
-                disabled={isLoading || !!pendingConfirmation}
+                disabled={isLoading}
               />
             </>
           )}

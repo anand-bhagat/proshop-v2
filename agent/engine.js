@@ -237,19 +237,6 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
 
       for (const toolCall of llmResponse.toolCalls) {
         toolCall.params = coerceToolParams(toolCall.params, toolCall.name);
-        const toolEntry = getToolEntry(toolCall.name);
-
-        // Confirmation flow for destructive tools
-        if (toolEntry && toolEntry.confirmBefore && !toolCall.params.__confirmed) {
-          return {
-            type: 'confirmation_needed',
-            tool: toolCall.name,
-            params: toolCall.params,
-            message: `I'd like to ${toolCall.name.replace(/_/g, ' ')}. Should I proceed?`,
-            toolResults,
-            conversationId: conversation.id,
-          };
-        }
 
         // Execute the tool
         const result = await executeTool(toolCall.name, toolCall.params, userContext);
@@ -263,11 +250,6 @@ async function runAgent({ message, conversationHistory = [], userContext, fronte
             toolResults,
             conversationId: conversation.id,
           };
-        }
-
-        // Confirmation needed (from registry-level check)
-        if (result.type === 'confirmation_needed') {
-          return { ...result, toolResults, conversationId: conversation.id };
         }
 
         // Feed result back to LLM
@@ -437,21 +419,6 @@ async function* runAgentStream({ message, conversationHistory = [], userContext,
         });
 
         for (const toolCall of toolCalls) {
-          const toolEntry = getToolEntry(toolCall.name);
-
-          if (toolEntry && toolEntry.confirmBefore && !toolCall.params.__confirmed) {
-            yield {
-              event: 'confirmation_needed',
-              data: {
-                tool: toolCall.name,
-                params: toolCall.params,
-                message: `I'd like to ${toolCall.name.replace(/_/g, ' ')}. Should I proceed?`,
-                conversationId: conversation.id,
-              },
-            };
-            return;
-          }
-
           // Status: executing tool
           yield { event: 'status', data: { message: getToolStatusMessage(toolCall.name) } };
 

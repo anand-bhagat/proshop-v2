@@ -97,13 +97,21 @@ const tools = {
 
   create_product: {
     description:
-      'Create a new product with sample placeholder values. Admin only. No parameters needed — creates a template product that can be updated afterward.',
+      'Create a new product in the catalog. Admin only. Requires name, price, category, brand, and countInStock. Optionally accepts description and image.',
     handler: createProduct,
     schema: {
       type: 'object',
-      required: [],
+      required: ['name', 'price', 'category', 'brand', 'countInStock'],
       additionalProperties: false,
-      properties: {},
+      properties: {
+        name: { type: 'string', minLength: 1, description: 'Product name.' },
+        price: { type: 'number', minimum: 0, description: 'Product price.' },
+        category: { type: 'string', minLength: 1, description: 'Product category (e.g. Electronics, Accessories).' },
+        brand: { type: 'string', minLength: 1, description: 'Product brand.' },
+        countInStock: { type: 'integer', minimum: 0, description: 'Number of units in stock.' },
+        description: { type: 'string', description: 'Product description. Optional.' },
+        image: { type: 'string', description: 'Product image path or URL. Optional.' },
+      },
     },
     execution: 'backend',
     access: 'admin',
@@ -680,9 +688,14 @@ function getToolDefinitions(userRole) {
     if (tool.access === 'admin' && userRole !== 'admin') continue;
     if (tool.access === 'authenticated' && !userRole) continue;
 
+    let description = tool.description;
+    if (tool.confirmBefore) {
+      description += ' ⚠️ DESTRUCTIVE: Always ask for user confirmation before calling this tool.';
+    }
+
     definitions.push({
       name,
-      description: tool.description,
+      description,
       parameters: tool.schema,
     });
   }
@@ -715,18 +728,7 @@ async function executeTool(name, params, context) {
     return errorResponse(access.error, 'FORBIDDEN');
   }
 
-  // Confirmation check for destructive tools
-  if (tool.confirmBefore && !params.__confirmed) {
-    return {
-      type: 'confirmation_needed',
-      tool: name,
-      params,
-      message: `I'd like to ${name.replace(/_/g, ' ')}. Should I proceed?`,
-    };
-  }
-
-  // Strip internal __confirmed flag before validation (not part of tool schema)
-  const { __confirmed, ...cleanParams } = params;
+  const cleanParams = { ...params };
 
   // Validate parameters
   const validation = validateParams(cleanParams, tool.schema);
